@@ -67,6 +67,11 @@ header h1 {
     color: var(--primary-color);
 }
 
+/* Special highlight for High Score */
+#high-score {
+    color: var(--accent-color);
+}
+
 .quote-display {
     margin-bottom: 1.5rem;
     font-size: 1.5rem;
@@ -128,12 +133,6 @@ header h1 {
     font-family: inherit;
     margin-bottom: 1.5rem;
     transition: border-color 0.3s;
-    /* Visually hiding the input but keeping it functional is a common pattern, 
-       but the prompt asks for a "textarea to be large and easy to use", 
-       so we will keep it visible and sync it. 
-       Ideally in a strict typing game the input is transparent over the text 
-       or hidden, but we'll follow the prompt's "input area" instruction literally.
-    */
 }
 
 .typing-input:focus {
@@ -166,4 +165,3 @@ footer {
     0%, 100% { opacity: 1; }
     50% { opacity: 0; }
 }
-

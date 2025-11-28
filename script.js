@@ -9,6 +9,7 @@ const typingInputElement = document.getElementById('typing-input');
 const timerElement = document.getElementById('timer');
 const wpmElement = document.getElementById('wpm');
 const accuracyElement = document.getElementById('accuracy');
+const highScoreElement = document.getElementById('high-score');
 const resetButton = document.getElementById('reset-button');
 
 // --- Word Source ---
@@ -33,6 +34,7 @@ let timerInterval = null;
 let isGameStarted = false;
 let totalCharactersTyped = 0;
 let correctCharacters = 0;
+let highScore = localStorage.getItem('typingGameHighScore') || 0;
 
 // --- Functions ---
 
@@ -116,11 +118,7 @@ function handleInput() {
 
     // Check for Game End (User typed the full quote)
     if (arrayValue.length === arrayQuote.length) {
-        // Optional: Check if all are correct before ending, or just end when length matches.
-        // The prompt says: "If the user has typed the entire quote... stop the timer"
-        clearInterval(timerInterval);
-        typingInputElement.disabled = true;
-        updateMetrics(); // Final update
+        endGame();
     }
 }
 
@@ -138,8 +136,7 @@ function startTimer() {
         updateMetrics();
 
         if (timer <= 0) {
-            clearInterval(timerInterval);
-            typingInputElement.disabled = true;
+            endGame();
             // Ensure timer doesn't go negative visually
             timerElement.innerText = 0;
         }
@@ -147,15 +144,35 @@ function startTimer() {
 }
 
 /**
+ * Ends the game, stops timer, updates final metrics and checks high score.
+ */
+function endGame() {
+    clearInterval(timerInterval);
+    typingInputElement.disabled = true;
+    
+    // Final metrics update
+    const currentWPM = updateMetrics();
+    
+    // Check and update High Score
+    if (currentWPM > highScore) {
+        highScore = currentWPM;
+        localStorage.setItem('typingGameHighScore', highScore);
+        updateHighScoreDisplay();
+    }
+}
+
+/**
  * Calculates and updates WPM and Accuracy.
+ * Returns the calculated WPM.
  */
 function updateMetrics() {
     const timeElapsed = maxTime - timer;
+    let wpm = 0;
     
     // Prevent division by zero
     if (timeElapsed > 0) {
         // WPM = (Total Characters / 5) / (Time Elapsed in Minutes)
-        const wpm = Math.round((totalCharactersTyped / 5) / (timeElapsed / 60));
+        wpm = Math.round((totalCharactersTyped / 5) / (timeElapsed / 60));
         wpmElement.innerText = wpm;
     }
 
@@ -165,6 +182,15 @@ function updateMetrics() {
         accuracy = Math.round((correctCharacters / totalCharactersTyped) * 100);
     }
     accuracyElement.innerText = accuracy;
+    
+    return wpm;
+}
+
+/**
+ * Updates the High Score display.
+ */
+function updateHighScoreDisplay() {
+    highScoreElement.innerText = highScore;
 }
 
 /**
@@ -181,6 +207,7 @@ function resetGame() {
     
     wpmElement.innerText = 0;
     accuracyElement.innerText = 100;
+    updateHighScoreDisplay();
     
     typingInputElement.disabled = false;
     
@@ -190,8 +217,24 @@ function resetGame() {
 
 // --- Event Listeners ---
 typingInputElement.addEventListener('input', handleInput);
+
+// Prevent pasting (Anti-cheat)
+typingInputElement.addEventListener('paste', (e) => {
+    e.preventDefault();
+    alert("No pasting allowed! Type it out properly.");
+});
+
 resetButton.addEventListener('click', resetGame);
 
-// Initialize the first game
-resetGame();
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    // Tab to restart
+    if (e.key === 'Tab') {
+        e.preventDefault(); // Prevent focus shift
+        resetGame();
+    }
+});
 
+// Initialize the first game
+updateHighScoreDisplay();
+renderNewQuote();
