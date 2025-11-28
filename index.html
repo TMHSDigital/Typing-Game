@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vanilla JS Typing Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Typing Speed Test</h1>
+        </header>
+
+        <div class="game-area">
+            <div id="stats-bar" class="stats">
+                <div class="stat-item">
+                    <span class="label">Time:</span>
+                    <span id="timer" class="value">60</span>s
+                </div>
+                <div class="stat-item">
+                    <span class="label">WPM:</span>
+                    <span id="wpm" class="value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Accuracy:</span>
+                    <span id="accuracy" class="value">100</span>%
+                </div>
+            </div>
+
+            <div id="quote-display" class="quote-display">
+                <!-- Quote characters will be injected here -->
+            </div>
+
+            <textarea id="typing-input" class="typing-input" placeholder="Start typing here..." autofocus></textarea>
+            
+            <button id="reset-button" class="reset-btn">Restart Game</button>
+        </div>
+
+        <footer>
+            <p>Built with Vanilla JS</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

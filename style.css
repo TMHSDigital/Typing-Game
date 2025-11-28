@@ -1,0 +1,169 @@
+:root {
+    --primary-color: #333;
+    --bg-color: #f4f4f9;
+    --container-bg: #ffffff;
+    --accent-color: #3498db;
+    --correct-color: #2ecc71;
+    --incorrect-color: #e74c3c;
+    --text-subtle: #7f8c8d;
+    --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--primary-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.container {
+    background-color: var(--container-bg);
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 800px;
+    text-align: center;
+}
+
+header h1 {
+    margin-bottom: 1.5rem;
+    color: var(--accent-color);
+}
+
+.stats {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #ecf0f1;
+    border-radius: 8px;
+    font-weight: bold;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stat-item .label {
+    font-size: 0.85rem;
+    color: var(--text-subtle);
+    margin-bottom: 0.25rem;
+}
+
+.stat-item .value {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+}
+
+.quote-display {
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    line-height: 1.6;
+    text-align: left;
+    background-color: #fafafa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    min-height: 100px;
+    font-family: 'Courier New', Courier, monospace; /* Monospace helps with typing rhythm */
+    white-space: pre-wrap; /* Preserve whitespace */
+    word-break: break-word;
+    user-select: none;
+}
+
+.quote-display span {
+    position: relative;
+}
+
+/* Character States */
+.correct {
+    color: var(--correct-color);
+}
+
+.incorrect {
+    color: var(--incorrect-color);
+    text-decoration: underline;
+    background-color: rgba(231, 76, 60, 0.1);
+}
+
+.current {
+    background-color: var(--accent-color);
+    color: white;
+    border-radius: 2px;
+}
+
+/* Cursor animation for .current - optional flair */
+.current::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 2px;
+    background-color: var(--accent-color);
+    animation: blink 1s infinite;
+    display: none; /* Using background highlight instead for clarity, but keeping structure */
+}
+
+.typing-input {
+    width: 100%;
+    height: 100px;
+    padding: 1rem;
+    font-size: 1.2rem;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    resize: none;
+    font-family: inherit;
+    margin-bottom: 1.5rem;
+    transition: border-color 0.3s;
+    /* Visually hiding the input but keeping it functional is a common pattern, 
+       but the prompt asks for a "textarea to be large and easy to use", 
+       so we will keep it visible and sync it. 
+       Ideally in a strict typing game the input is transparent over the text 
+       or hidden, but we'll follow the prompt's "input area" instruction literally.
+    */
+}
+
+.typing-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.reset-btn {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.reset-btn:hover {
+    background-color: #2980b9;
+}
+
+footer {
+    margin-top: 2rem;
+    font-size: 0.8rem;
+    color: var(--text-subtle);
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
