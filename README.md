@@ -1,14 +1,5 @@
 # TypeSpeed
 
-```text
-  _______   _____  ______   _____ ____  ______ ______ _____  
- |__   __| \ \   / /  __ \ |  ___/ ___||  ____|  ____|  __ \ 
-    | |     \ \_/ /| |__) || |__ \___ \| |__  | |__  | |  | |
-    | |      \   / |  ___/ |  __| ___) |  __| |  __| | |  | |
-    | |       | |  | |     | |___|____/| |    | |____| |__| |
-    |_|       |_|  |_|     |_____|____/|_|    |______|_____/ 
-```
-
 **A High-Performance, Zero-Dependency Typing Accelerator.**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
