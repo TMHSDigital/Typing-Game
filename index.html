@@ -43,11 +43,26 @@
             </div>
 
             <div class="controls">
-                 <label class="toggle-label">
-                    <input type="checkbox" id="hard-mode-toggle">
-                    <span class="toggle-custom"></span>
-                    Hard Mode
-                </label>
+                <div class="control-group left">
+                    <select id="category-select" class="category-select">
+                        <option value="general">General</option>
+                        <option value="technology">Technology</option>
+                        <option value="code">Code Snippets</option>
+                    </select>
+                </div>
+                
+                <div class="control-group right">
+                     <label class="toggle-label">
+                        <input type="checkbox" id="sound-toggle" checked>
+                        <span class="toggle-custom"></span>
+                        Sound
+                    </label>
+                     <label class="toggle-label">
+                        <input type="checkbox" id="hard-mode-toggle">
+                        <span class="toggle-custom"></span>
+                        Hard Mode
+                    </label>
+                </div>
             </div>
 
             <div class="typing-container">
@@ -69,6 +84,27 @@
         <footer>
             <p>tab to restart</p>
         </footer>
+
+        <!-- Result Modal -->
+        <div id="result-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h2>Result</h2>
+                <div class="modal-stats">
+                    <div class="modal-stat">
+                        <span class="label">WPM</span>
+                        <span id="modal-wpm" class="value">0</span>
+                    </div>
+                    <div class="modal-stat">
+                        <span class="label">Accuracy</span>
+                        <span id="modal-accuracy" class="value">0%</span>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button id="share-btn" class="action-btn secondary">Share Result</button>
+                    <button id="play-again-btn" class="action-btn primary">Play Again</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
