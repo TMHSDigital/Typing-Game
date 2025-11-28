@@ -1,59 +1,96 @@
-# TypeSpeed - Professional Typing Test
+# TypeSpeed
 
-TypeSpeed is a modern, high-performance typing speed test application built with vanilla JavaScript. It features a "Glassmorphism & Tech" aesthetic, real-time metrics, and advanced gameplay features designed to provide a premium user experience without any frameworks or dependencies.
+```text
+  _______   _____  ______   _____ ____  ______ ______ _____  
+ |__   __| \ \   / /  __ \ |  ___/ ___||  ____|  ____|  __ \ 
+    | |     \ \_/ /| |__) || |__ \___ \| |__  | |__  | |  | |
+    | |      \   / |  ___/ |  __| ___) |  __| |  __| | |  | |
+    | |       | |  | |     | |___|____/| |    | |____| |__| |
+    |_|       |_|  |_|     |_____|____/|_|    |______|_____/ 
+```
 
-## Features
+**A High-Performance, Zero-Dependency Typing Accelerator.**
 
-### Core Gameplay
-- **Real-time Metrics**: Tracks Words Per Minute (WPM), Accuracy, and Mistakes instantly as you type.
-- **High Score Tracking**: Automatically persists your personal best WPM using local storage.
-- **Timer**: Configurable timer settings (15s, 30s, 60s).
-- **Word Count Mode**: Alternative game mode where you race to complete a fixed number of words (10, 25, 50).
-- **Anti-Cheat**: Paste events are blocked to ensure fair play.
-- **Instant Restart**: Press `Tab` to quickly reset the game.
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Status](https://img.shields.io/badge/Status-Active-success.svg)]()
+[![Tech](https://img.shields.io/badge/Stack-Vanilla_JS-yellow.svg)]()
 
-### Advanced Modes & Settings
-- **Quote Categories**: Choose between:
-  - **General**: Standard English sentences.
-  - **Technology**: Tech-focused quotes and wisdom.
-  - **Code Snippets**: Challenge yourself with real JavaScript/React syntax.
-- **Hard Mode**: Blurs the future text, forcing you to type with flow and memory.
-- **Ghost Mode**: Compete against your own best run with a visual ghost cursor that replays your past performance in real-time.
-- **Progress Tracking**: Visual line chart of your last 10 games displayed in the results modal.
+---
 
-### UI/UX Design
-- **Glassmorphism Theme**: A deep, animated gradient background with frosted glass containers.
-- **Settings Hub**: A dedicated settings modal to customize every aspect of the experience without cluttering the main HUD.
-- **Focus Mode**: The UI dims automatically when typing starts.
-- **Sound Effects**: Satisfying mechanical click feedback, synthesized via the Web Audio API.
+## Overview
 
-## File Structure
+TypeSpeed is a professional-grade typing trainer engineered with a focus on aesthetics, performance, and zero-latency feedback. Unlike bloated web apps, TypeSpeed runs entirely client-side using highly optimized Vanilla JavaScript, delivering a "Glassmorphism & Tech" experience that feels more like a HUD than a website.
 
-The project is entirely self-contained:
+Designed for developers and touch-typists who demand precision.
 
-- `index.html`: Semantic HTML5 structure including the game HUD, typing area, and modals.
-- `style.css`: Comprehensive CSS3 styling using CSS Variables for theming and Flexbox/Grid for layout.
-- `script.js`: Vanilla JS logic handling the game loop, audio synthesis, ghost recording/playback, and chart generation.
+## Key Capabilities
 
-## Setup & Usage
+### ⚡ Core Engine
+*   **Real-Time Telemetry**: Calculates WPM, Accuracy, and Mistake ratios on every keystroke event.
+*   **Zero Latency**: Input handling is decoupled from visual rendering for maximum responsiveness.
+*   **Offline Architecture**: No backend required. All logic, data, and assets are contained within the client.
 
-No build steps or installation required.
+### 🎮 Gameplay Modes
+*   **Sprint**: Classic 60-second endurance test.
+*   **Blitz**: Short 15s and 30s bursts for raw speed training.
+*   **Word Count**: Race to complete fixed sets of 10, 25, or 50 words.
+*   **Code Mode**: Specialized syntax training featuring real JavaScript snippets (brackets, semicolons, camelCase).
 
-1. **Clone the repository** or download the source code.
-2. **Open `index.html`** in any modern web browser.
-3. **Start Typing**: The game begins on your first keystroke.
+### 🛡️ Advanced Systems
+*   **Ghost Mode**: Records your keystroke timing data during a run and replays it visually in subsequent games, allowing you to race against your own "Ghost".
+*   **Anti-Cheat**: Blocks paste events and monitors input integrity.
+*   **Focus Protocol**: Automatically dims UI elements (header, footer, stats) when typing begins to eliminate peripheral distractions.
 
-## Tech Stack & Design Choices
+## Technical Architecture
 
-- **Vanilla JavaScript**: Chosen for performance and zero-dependency portability.
-- **SVG Charts**: Custom-built SVG generation for the progress chart, avoiding heavy charting libraries.
-- **AudioContext API**: Used to synthesize sound effects on the fly.
-- **Local Storage**: Persists history, high scores, and best-run data for Ghost Mode.
+### Audio Synthesis
+Instead of loading heavy `.mp3` assets, TypeSpeed utilizes the **Web Audio API** to synthesize sound effects in real-time:
+*   **Click**: High-frequency sine/exponential ramp.
+*   **Error**: Sawtooth wave with linear decay.
+*   **Success**: Polyphonic C-Major arpeggio.
 
-## Deployment
+### Data Persistence
+User progress is stored locally using the browser's `localStorage` API, persisting:
+*   **High Scores**: Best WPM per session.
+*   **History**: Last 10 runs for chart visualization.
+*   **Ghost Data**: Keystroke-level timestamp data of the best run.
 
-Ready for static hosting (GitHub Pages, Vercel, Netlify):
+### Visuals
+*   **SVG Charting**: Custom implementation of line charts using SVG paths, avoiding heavy charting libraries.
+*   **CSS Variables**: extensive use of `--var` for theming and easy refactoring.
+*   **Glassmorphism**: `backdrop-filter: blur()` used heavily for the modern UI aesthetic.
 
-1. Push to a repository.
-2. Enable GitHub Pages in settings.
-3. Your TypeSpeed app is live!
+## Project Structure
+
+```text
+TypeSpeed/
+├── index.html       # Semantic DOM structure & Modals
+├── style.css        # 500+ lines of CSS3 (Grid, Flex, Keyframes)
+├── script.js        # Game Loop, Audio Engine, State Management
+├── README.md        # Documentation
+└── LICENSE          # Apache 2.0
+```
+
+## Quick Start
+
+No build steps. No npm install. No servers.
+
+1.  **Clone**
+    ```bash
+    git clone https://github.com/TMHSDigital/Typing-Game.git
+    ```
+2.  **Run**
+    Open `index.html` in Chrome, Firefox, Edge, or Safari.
+
+## Roadmap
+
+*   [x] Core Typing Engine
+*   [x] Glassmorphism UI
+*   [x] Sound Synthesis
+*   [x] Ghost Mode
+*   [ ] Multiplayer Lobbies (WebSockets)
+*   [ ] Custom Text Import
+
+---
+
+*Built with precision in 2025.*
