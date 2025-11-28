@@ -1,84 +1,61 @@
-# Vanilla JS Typing Game
+# TypeSpeed - Professional Typing Test
 
-A lightweight, self-contained typing speed test game built entirely with HTML, CSS, and vanilla JavaScript. No frameworks, no build steps, and no server-side dependencies.
+TypeSpeed is a modern, high-performance typing speed test application built with vanilla JavaScript. It features a "Glassmorphism & Tech" aesthetic, real-time metrics, and advanced gameplay features designed to provide a premium user experience without any frameworks or dependencies.
 
 ## Features
 
-- **Real-time Feedback**: Visual cues for correct (green) and incorrect (red) characters as you type.
-- **Live Metrics**: Accurately calculates Words Per Minute (WPM) and typing accuracy in real-time.
-- **High Score Tracking**: Automatically saves your best WPM to local storage.
-- **Hard Mode**: Optional challenge mode that blurs the text, forcing you to look ahead and memorize.
-- **Mistake Counter**: Tracks the total number of typing errors in the current session.
-- **Anti-Cheat**: Prevents pasting text into the input field.
-- **Keyboard Shortcuts**: Press `Tab` to instantly restart the game.
-- **Timer**: 60-second countdown timer.
-- **Responsive Design**: Clean, modern interface that centers on the screen.
-- **Offline Capable**: Uses a hardcoded set of quotes, ensuring the game works without an internet connection.
+### Core Gameplay
+- **Real-time Metrics**: Tracks Words Per Minute (WPM), Accuracy, and Mistakes instantly as you type.
+- **High Score Tracking**: Automatically persists your personal best WPM using local storage.
+- **Timer**: Standard 60-second sprint mode.
+- **Anti-Cheat**: Paste events are blocked to ensure fair play.
+- **Instant Restart**: Press `Tab` to quickly reset the game.
+
+### Advanced Modes & Settings
+- **Quote Categories**: Choose between:
+  - **General**: Standard English sentences.
+  - **Technology**: Tech-focused quotes and wisdom.
+  - **Code Snippets**: Challenge yourself with real JavaScript/React syntax (brackets, semicolons, etc.).
+- **Hard Mode**: Toggling this blurs the future text, forcing you to memorize words and type with flow rather than reading character-by-character.
+- **Sound Effects**: 
+  - Mechanical click feedback for correct keystrokes.
+  - Subtle "buzz" for errors.
+  - Success chime upon completion.
+  - Toggleable via the "Sound" switch.
+
+### UI/UX Design
+- **Glassmorphism Theme**: A deep, animated gradient background with frosted glass containers.
+- **Focus Mode**: The UI (header, stats, footer) dims automatically when you start typing to reduce distractions.
+- **Neon Aesthetics**: High-contrast text effects and a glowing cursor for maximum legibility.
+- **Result Modal**: A clean summary screen appears after each game with options to share your score or play again.
 
 ## File Structure
 
-The project consists of three main files:
+The project is entirely self-contained:
 
-- `index.html`: The structural markup of the game.
-- `style.css`: The styling, including specific classes for character states (`.correct`, `.incorrect`, `.current`) and Hard Mode blur effects.
-- `script.js`: The core game logic, state management, and DOM manipulation.
+- `index.html`: Semantic HTML5 structure including the game HUD, typing area, and modal.
+- `style.css`: Comprehensive CSS3 styling using CSS Variables for theming, Flexbox/Grid for layout, and keyframe animations.
+- `script.js`: Vanilla JS logic handling the game loop, audio synthesis (`AudioContext`), DOM manipulation, and state management.
 
 ## Setup & Usage
 
-Since this project requires no build tools, setup is instant:
+No build steps or installation required.
 
-1. **Clone the repository** or download the files.
+1. **Clone the repository** or download the source code.
 2. **Open `index.html`** in any modern web browser.
-3. **Start typing**: The game begins automatically when you type the first character.
-4. **Restart**: Click the "Restart Game" button or press `Tab`.
+3. **Start Typing**: The timer begins on your first keystroke.
 
-## Game Logic
+## Tech Stack & Design Choices
 
-### Word Source
-Quotes are stored in a `QUOTES` constant array within `script.js`. A random quote is selected via `getRandomQuote()` each time the game starts or resets.
-
-### State Management
-The game tracks several variables:
-- `timer`: Remaining time (starts at 60s).
-- `isGameStarted`: Boolean flag to trigger the timer on the first keystroke.
-- `correctCharacters`: Counter for accurate keystrokes.
-- `totalCharactersTyped`: Counter for total keystrokes.
-- `mistakes`: Counter for every incorrect keystroke.
-- `highScore`: Persisted best WPM using `localStorage`.
-- `isHardMode`: Boolean state for the visual blur toggle.
-
-### Metrics Calculation
-- **WPM (Words Per Minute)**: Calculated using the standard formula:
-  $$ \frac{(\text{Total Characters} / 5)}{\text{Time Elapsed (in minutes)}} $$
-- **Accuracy**:
-  $$ \frac{\text{Correct Characters}}{\text{Total Characters Typed}} \times 100 $$
-
-## Customization
-
-### Changing the Quotes
-To add or change the text content, edit the `QUOTES` array in `script.js`:
-
-```javascript
-const QUOTES = [
-    "Your new quote here.",
-    "Another custom sentence.",
-    // ...
-];
-```
-
-### Adjusting the Timer
-To change the game duration, update the `timer` and `maxTime` variables in `script.js`:
-
-```javascript
-let timer = 60; // Change to desired seconds
-let maxTime = 60;
-```
+- **Vanilla JavaScript**: chosen for performance and zero-dependency portability.
+- **AudioContext API**: Used to synthesize sound effects on the fly, keeping the project asset-free (no external `.mp3` files needed).
+- **CSS Glassmorphism**: Utilizes `backdrop-filter: blur()` and semi-transparent backgrounds to create a modern, layered depth effect.
+- **Local Storage**: Provides a lightweight way to save user progress (High Score) without a backend.
 
 ## Deployment
 
-This project is ready for static hosting services like **GitHub Pages**:
+Ready for static hosting (GitHub Pages, Vercel, Netlify):
 
-1. Push the code to a GitHub repository.
-2. Go to **Settings** > **Pages**.
-3. Select the **main** branch as the source.
-4. Save, and your game will be live.
+1. Push to a repository.
+2. Enable GitHub Pages in settings.
+3. Your TypeSpeed app is live!
