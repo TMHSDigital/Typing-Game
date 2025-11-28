@@ -72,6 +72,20 @@ header h1 {
     color: var(--accent-color);
 }
 
+.controls {
+    margin-bottom: 1rem;
+    text-align: right;
+}
+
+.toggle-label {
+    font-size: 0.9rem;
+    color: var(--text-subtle);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .quote-display {
     margin-bottom: 1.5rem;
     font-size: 1.5rem;
@@ -86,7 +100,32 @@ header h1 {
     white-space: pre-wrap; /* Preserve whitespace */
     word-break: break-word;
     user-select: none;
+    transition: filter 0.3s ease;
 }
+
+/* Hard Mode: Blur the text except for the current word context (optional) or blur everything */
+.quote-display.blurred span {
+    color: transparent;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+
+/* Show correct/incorrect characters clearly even in hard mode */
+.quote-display.blurred span.correct {
+    color: var(--correct-color);
+    text-shadow: none;
+}
+
+.quote-display.blurred span.incorrect {
+    color: var(--incorrect-color);
+    text-shadow: none;
+}
+/* Keep current cursor visible */
+.quote-display.blurred span.current {
+    background-color: var(--accent-color);
+    color: transparent;
+    text-shadow: none;
+}
+
 
 .quote-display span {
     position: relative;

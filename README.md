@@ -5,7 +5,12 @@ A lightweight, self-contained typing speed test game built entirely with HTML, C
 ## Features
 
 - **Real-time Feedback**: Visual cues for correct (green) and incorrect (red) characters as you type.
-- **Live Metrics**: accurately calculates Words Per Minute (WPM) and typing accuracy in real-time.
+- **Live Metrics**: Accurately calculates Words Per Minute (WPM) and typing accuracy in real-time.
+- **High Score Tracking**: Automatically saves your best WPM to local storage.
+- **Hard Mode**: Optional challenge mode that blurs the text, forcing you to look ahead and memorize.
+- **Mistake Counter**: Tracks the total number of typing errors in the current session.
+- **Anti-Cheat**: Prevents pasting text into the input field.
+- **Keyboard Shortcuts**: Press `Tab` to instantly restart the game.
 - **Timer**: 60-second countdown timer.
 - **Responsive Design**: Clean, modern interface that centers on the screen.
 - **Offline Capable**: Uses a hardcoded set of quotes, ensuring the game works without an internet connection.
@@ -15,7 +20,7 @@ A lightweight, self-contained typing speed test game built entirely with HTML, C
 The project consists of three main files:
 
 - `index.html`: The structural markup of the game.
-- `style.css`: The styling, including specific classes for character states (`.correct`, `.incorrect`, `.current`).
+- `style.css`: The styling, including specific classes for character states (`.correct`, `.incorrect`, `.current`) and Hard Mode blur effects.
 - `script.js`: The core game logic, state management, and DOM manipulation.
 
 ## Setup & Usage
@@ -25,6 +30,7 @@ Since this project requires no build tools, setup is instant:
 1. **Clone the repository** or download the files.
 2. **Open `index.html`** in any modern web browser.
 3. **Start typing**: The game begins automatically when you type the first character.
+4. **Restart**: Click the "Restart Game" button or press `Tab`.
 
 ## Game Logic
 
@@ -37,6 +43,9 @@ The game tracks several variables:
 - `isGameStarted`: Boolean flag to trigger the timer on the first keystroke.
 - `correctCharacters`: Counter for accurate keystrokes.
 - `totalCharactersTyped`: Counter for total keystrokes.
+- `mistakes`: Counter for every incorrect keystroke.
+- `highScore`: Persisted best WPM using `localStorage`.
+- `isHardMode`: Boolean state for the visual blur toggle.
 
 ### Metrics Calculation
 - **WPM (Words Per Minute)**: Calculated using the standard formula:

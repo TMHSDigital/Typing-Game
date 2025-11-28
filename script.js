@@ -9,8 +9,10 @@ const typingInputElement = document.getElementById('typing-input');
 const timerElement = document.getElementById('timer');
 const wpmElement = document.getElementById('wpm');
 const accuracyElement = document.getElementById('accuracy');
+const mistakesElement = document.getElementById('mistakes');
 const highScoreElement = document.getElementById('high-score');
 const resetButton = document.getElementById('reset-button');
+const hardModeToggle = document.getElementById('hard-mode-toggle');
 
 // --- Word Source ---
 // Hardcoded array of quotes to ensure offline functionality
@@ -34,7 +36,9 @@ let timerInterval = null;
 let isGameStarted = false;
 let totalCharactersTyped = 0;
 let correctCharacters = 0;
+let mistakes = 0;
 let highScore = localStorage.getItem('typingGameHighScore') || 0;
+let isHardMode = false;
 
 // --- Functions ---
 
@@ -74,7 +78,7 @@ function renderNewQuote() {
  * Main input handler.
  * Checks correctness, updates UI classes, and manages game state.
  */
-function handleInput() {
+function handleInput(e) {
     // Start timer on first keypress
     if (!isGameStarted) {
         startTimer();
@@ -82,6 +86,22 @@ function handleInput() {
 
     const arrayQuote = quoteDisplayElement.querySelectorAll('span');
     const arrayValue = typingInputElement.value.split('');
+    const inputLength = arrayValue.length;
+    
+    // Mistake Tracking Logic:
+    // If the input length increased (user typed a character)
+    // Check if the last typed character is incorrect
+    if (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') {
+        const currentInd = inputLength - 1;
+        if (currentInd < arrayQuote.length) {
+             const charTyped = arrayValue[currentInd];
+             const charQuote = arrayQuote[currentInd].innerText;
+             if (charTyped !== charQuote) {
+                 mistakes++;
+                 mistakesElement.innerText = mistakes;
+             }
+        }
+    }
 
     let correctCount = 0;
     
@@ -204,14 +224,30 @@ function resetGame() {
     isGameStarted = false;
     totalCharactersTyped = 0;
     correctCharacters = 0;
+    mistakes = 0;
     
     wpmElement.innerText = 0;
     accuracyElement.innerText = 100;
+    mistakesElement.innerText = 0;
     updateHighScoreDisplay();
     
     typingInputElement.disabled = false;
     
     renderNewQuote();
+    typingInputElement.focus();
+}
+
+/**
+ * Toggles Hard Mode class on the quote display
+ */
+function toggleHardMode() {
+    isHardMode = hardModeToggle.checked;
+    if (isHardMode) {
+        quoteDisplayElement.classList.add('blurred');
+    } else {
+        quoteDisplayElement.classList.remove('blurred');
+    }
+    // Focus input after toggle so user can keep typing/start
     typingInputElement.focus();
 }
 
@@ -225,6 +261,9 @@ typingInputElement.addEventListener('paste', (e) => {
 });
 
 resetButton.addEventListener('click', resetGame);
+
+// Hard Mode Toggle
+hardModeToggle.addEventListener('change', toggleHardMode);
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
