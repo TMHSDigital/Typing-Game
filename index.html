@@ -14,12 +14,18 @@
     <div class="container">
         <header>
             <h1>TYPE<span class="accent">SPEED</span></h1>
+            <button id="settings-btn" class="icon-btn" title="Settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
         </header>
 
         <div class="game-area">
             <div id="stats-bar" class="stats">
                 <div class="stat-item">
-                    <span class="label">Time</span>
+                    <span class="label" id="timer-label">Time</span>
                     <span id="timer" class="value">60</span>
                     <span class="unit">s</span>
                 </div>
@@ -52,16 +58,11 @@
                 </div>
                 
                 <div class="control-group right">
-                     <label class="toggle-label">
-                        <input type="checkbox" id="sound-toggle" checked>
-                        <span class="toggle-custom"></span>
-                        Sound
-                    </label>
-                     <label class="toggle-label">
-                        <input type="checkbox" id="hard-mode-toggle">
-                        <span class="toggle-custom"></span>
-                        Hard Mode
-                    </label>
+                     <div id="mode-badges" class="mode-badges">
+                        <!-- Dynamic badges for current settings -->
+                        <span class="badge" id="time-badge">60s</span>
+                        <span class="badge hidden" id="ghost-badge">Ghost On</span>
+                     </div>
                 </div>
             </div>
 
@@ -99,12 +100,79 @@
                         <span id="modal-accuracy" class="value">0%</span>
                     </div>
                 </div>
+                
+                <div class="chart-container">
+                    <h3>Progress (Last 10 Games)</h3>
+                    <svg id="progress-chart" width="100%" height="100" viewBox="0 0 300 100" preserveAspectRatio="none">
+                        <!-- Chart line will be injected here -->
+                    </svg>
+                </div>
+
                 <div class="modal-actions">
                     <button id="share-btn" class="action-btn secondary">Share Result</button>
                     <button id="play-again-btn" class="action-btn primary">Play Again</button>
                 </div>
             </div>
         </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal-overlay hidden">
+            <div class="modal-content settings-content">
+                <h2>Settings</h2>
+                
+                <div class="setting-group">
+                    <label>Game Mode</label>
+                    <div class="pill-selector" id="mode-selector">
+                        <button class="pill active" data-value="time">Time</button>
+                        <button class="pill" data-value="words">Words</button>
+                    </div>
+                </div>
+
+                <div class="setting-group" id="timer-setting">
+                    <label>Duration</label>
+                    <div class="pill-selector" id="duration-selector">
+                        <button class="pill" data-value="15">15s</button>
+                        <button class="pill" data-value="30">30s</button>
+                        <button class="pill active" data-value="60">60s</button>
+                    </div>
+                </div>
+
+                <div class="setting-group hidden" id="word-count-setting">
+                    <label>Word Count</label>
+                    <div class="pill-selector" id="word-count-selector">
+                        <button class="pill active" data-value="10">10</button>
+                        <button class="pill" data-value="25">25</button>
+                        <button class="pill" data-value="50">50</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label>Features</label>
+                    <div class="toggles-list">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="sound-toggle-settings" checked>
+                            <span class="toggle-custom"></span>
+                            Sound Effects
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="hard-mode-toggle-settings">
+                            <span class="toggle-custom"></span>
+                            Hard Mode
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="ghost-mode-toggle">
+                            <span class="toggle-custom"></span>
+                            Ghost Mode
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="close-settings-btn" class="action-btn primary">Done</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="script.js"></script>

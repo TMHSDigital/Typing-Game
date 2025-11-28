@@ -7,25 +7,41 @@
 const quoteDisplayElement = document.getElementById('quote-display');
 const typingInputElement = document.getElementById('typing-input');
 const timerElement = document.getElementById('timer');
+const timerLabelElement = document.getElementById('timer-label');
 const wpmElement = document.getElementById('wpm');
 const accuracyElement = document.getElementById('accuracy');
 const mistakesElement = document.getElementById('mistakes');
 const highScoreElement = document.getElementById('high-score');
 const resetButton = document.getElementById('reset-button');
-const hardModeToggle = document.getElementById('hard-mode-toggle');
-const soundToggle = document.getElementById('sound-toggle');
-const categorySelect = document.getElementById('category-select');
 const containerElement = document.querySelector('.container');
+const categorySelect = document.getElementById('category-select');
+const timeBadge = document.getElementById('time-badge');
+const ghostBadge = document.getElementById('ghost-badge');
 
-// Modal Elements
+// Modals
 const resultModal = document.getElementById('result-modal');
+const settingsModal = document.getElementById('settings-modal');
 const modalWpmElement = document.getElementById('modal-wpm');
 const modalAccuracyElement = document.getElementById('modal-accuracy');
 const shareBtn = document.getElementById('share-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
+const settingsBtn = document.getElementById('settings-btn');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+
+// Settings Inputs
+const modeSelector = document.getElementById('mode-selector');
+const durationSelector = document.getElementById('duration-selector');
+const wordCountSelector = document.getElementById('word-count-selector');
+const timerSettingGroup = document.getElementById('timer-setting');
+const wordCountSettingGroup = document.getElementById('word-count-setting');
+const soundToggle = document.getElementById('sound-toggle-settings'); // Moved to settings
+const hardModeToggle = document.getElementById('hard-mode-toggle-settings'); // Moved to settings
+const ghostModeToggle = document.getElementById('ghost-mode-toggle');
+
+// Chart
+const progressChart = document.getElementById('progress-chart');
 
 // --- Word Source ---
-// Expanded QUOTES object with categories
 const QUOTES = {
     general: [
         "The quick brown fox jumps over the lazy dog.",
@@ -66,22 +82,35 @@ const QUOTES = {
 };
 
 // --- Game State Variables ---
-let timer = 60;
-let maxTime = 60;
-let timerInterval = null;
-let isGameStarted = false;
-let totalCharactersTyped = 0;
-let correctCharacters = 0;
-let mistakes = 0;
-let highScore = localStorage.getItem('typingGameHighScore') || 0;
-let isHardMode = false;
-let currentCategory = 'general';
+let gameState = {
+    mode: 'time', // 'time' or 'words'
+    duration: 60, // seconds
+    wordCount: 10, // words
+    category: 'general',
+    isGhostEnabled: false,
+    isHardMode: false,
+    isSoundEnabled: true
+};
+
+let runtime = {
+    timer: 60,
+    interval: null,
+    isStarted: false,
+    startTime: 0,
+    totalChars: 0,
+    correctChars: 0,
+    mistakes: 0,
+    keystrokes: [] // Array of {time: ms, charIndex: int} for Ghost
+};
+
+let history = JSON.parse(localStorage.getItem('typingGameHistory')) || [];
+let bestRun = JSON.parse(localStorage.getItem('typingGameBestRun')) || null;
 
 // --- Audio System ---
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 function playSound(type) {
-    if (!soundToggle.checked) return;
+    if (!gameState.isSoundEnabled) return;
     if (audioContext.state === 'suspended') audioContext.resume();
 
     const osc = audioContext.createOscillator();
@@ -93,7 +122,6 @@ function playSound(type) {
     const now = audioContext.currentTime;
 
     if (type === 'click') {
-        // High pitched short mechanical click
         osc.type = 'sine';
         osc.frequency.setValueAtTime(800, now);
         osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
@@ -102,7 +130,6 @@ function playSound(type) {
         osc.start(now);
         osc.stop(now + 0.05);
     } else if (type === 'error') {
-        // Low buzzing thud
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(100, now);
         osc.frequency.linearRampToValueAtTime(80, now + 0.15);
@@ -111,14 +138,12 @@ function playSound(type) {
         osc.start(now);
         osc.stop(now + 0.15);
     } else if (type === 'success') {
-        // Ascending chime (multiple oscillators)
-        const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major arpeggio
+        const notes = [523.25, 659.25, 783.99, 1046.50];
         notes.forEach((note, i) => {
             const osc2 = audioContext.createOscillator();
             const gain2 = audioContext.createGain();
             osc2.connect(gain2);
             gain2.connect(audioContext.destination);
-            
             const time = now + (i * 0.1);
             osc2.type = 'sine';
             osc2.frequency.value = note;
@@ -130,67 +155,71 @@ function playSound(type) {
     }
 }
 
+// --- Core Logic ---
 
-// --- Functions ---
-
-/**
- * Selects and returns a random quote from the QUOTES array based on category.
- */
 function getRandomQuote() {
-    const categoryQuotes = QUOTES[currentCategory] || QUOTES['general'];
+    const categoryQuotes = QUOTES[gameState.category] || QUOTES['general'];
     const randomIndex = Math.floor(Math.random() * categoryQuotes.length);
+    // For word count mode, we might need longer text, so we could join multiple
+    if (gameState.mode === 'words') {
+        // Simplification: Just return a long enough string or multiple quotes
+        let text = categoryQuotes[randomIndex];
+        while (text.split(' ').length < gameState.wordCount) {
+            text += ' ' + categoryQuotes[Math.floor(Math.random() * categoryQuotes.length)];
+        }
+        // Trim to approximate word count for cleaner UI
+        return text.split(' ').slice(0, gameState.wordCount).join(' ');
+    }
     return categoryQuotes[randomIndex];
 }
 
-/**
- * Renders a new quote to the display.
- * Clears existing content and creates span elements for each character.
- */
 function renderNewQuote() {
     const quote = getRandomQuote();
     quoteDisplayElement.innerHTML = '';
     
-    // Split quote into characters and create spans
+    // Create Ghost Cursor Element if needed
+    if (gameState.isGhostEnabled) {
+        const ghostCursor = document.createElement('div');
+        ghostCursor.id = 'ghost-cursor';
+        ghostCursor.className = 'ghost-cursor'; // Need CSS
+        quoteDisplayElement.appendChild(ghostCursor);
+    }
+
     quote.split('').forEach(character => {
         const characterSpan = document.createElement('span');
         characterSpan.innerText = character;
         quoteDisplayElement.appendChild(characterSpan);
     });
     
-    // Set the first character as current
-    if (quoteDisplayElement.firstChild) {
-        quoteDisplayElement.firstChild.classList.add('current');
+    if (quoteDisplayElement.querySelector('span')) {
+        quoteDisplayElement.querySelector('span').classList.add('current');
     }
-    
-    // Reset input value
     typingInputElement.value = '';
 }
 
-/**
- * Main input handler.
- * Checks correctness, updates UI classes, and manages game state.
- */
 function handleInput(e) {
-    // Start timer on first keypress
-    if (!isGameStarted) {
-        startTimer();
-        // Enable Focus Mode
-        containerElement.classList.add('focus-mode');
+    if (!runtime.isStarted) {
+        startGame();
     }
 
     const arrayQuote = quoteDisplayElement.querySelectorAll('span');
     const arrayValue = typingInputElement.value.split('');
-    const inputLength = arrayValue.length;
     
-    // Mistake Tracking Logic:
+    // Record keystroke for Ghost
+    if (runtime.isStarted) {
+        const timeOffset = Date.now() - runtime.startTime;
+        runtime.keystrokes.push({ t: timeOffset, i: arrayValue.length });
+    }
+
+    // Mistake Logic
     if (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') {
-        const currentInd = inputLength - 1;
+        const currentInd = arrayValue.length - 1;
         if (currentInd < arrayQuote.length) {
              const charTyped = arrayValue[currentInd];
              const charQuote = arrayQuote[currentInd].innerText;
              if (charTyped !== charQuote) {
-                 mistakes++;
-                 mistakesElement.innerText = mistakes;
+                 runtime.mistakes++;
+                 mistakesElement.innerText = runtime.mistakes;
                  playSound('error');
              } else {
                  playSound('click');
@@ -199,230 +228,293 @@ function handleInput(e) {
     }
 
     let correctCount = 0;
-    
-    // Loop through each character in the quote
     arrayQuote.forEach((characterSpan, index) => {
         const character = arrayValue[index];
-
-        // Reset classes first
-        characterSpan.classList.remove('correct');
-        characterSpan.classList.remove('incorrect');
-        characterSpan.classList.remove('current');
-
+        characterSpan.classList.remove('correct', 'incorrect', 'current');
+        
         if (character == null) {
-            // Character hasn't been typed yet
-            // Do nothing, it's future text
         } else if (character === characterSpan.innerText) {
-            // Correctly typed
             characterSpan.classList.add('correct');
             correctCount++;
         } else {
-            // Incorrectly typed
             characterSpan.classList.add('incorrect');
         }
     });
 
-    // Update 'current' cursor position
     if (arrayValue.length < arrayQuote.length) {
         arrayQuote[arrayValue.length].classList.add('current');
     }
 
-    // Update current correct count for metrics
-    correctCharacters = correctCount;
-    totalCharactersTyped = arrayValue.length;
+    runtime.correctChars = correctCount;
+    runtime.totalChars = arrayValue.length;
 
-    // Check for Game End (User typed the full quote)
+    // Check Completion
     if (arrayValue.length === arrayQuote.length) {
         endGame();
     }
 }
 
-/**
- * Starts the game timer and interval.
- */
-function startTimer() {
-    isGameStarted = true;
-    timerElement.innerText = timer;
+function startGame() {
+    runtime.isStarted = true;
+    runtime.startTime = Date.now();
+    containerElement.classList.add('focus-mode');
     
-    timerInterval = setInterval(() => {
-        timer--;
-        timerElement.innerText = timer;
+    if (gameState.mode === 'time') {
+        runtime.timer = gameState.duration;
+        timerLabelElement.innerText = 'Time';
+        timerElement.innerText = runtime.timer;
         
-        updateMetrics();
-
-        if (timer <= 0) {
-            endGame();
-            // Ensure timer doesn't go negative visually
-            timerElement.innerText = 0;
-        }
-    }, 1000);
-}
-
-/**
- * Ends the game, stops timer, updates final metrics and checks high score.
- */
-function endGame() {
-    clearInterval(timerInterval);
-    typingInputElement.disabled = true;
-    
-    // Disable Focus Mode
-    containerElement.classList.remove('focus-mode');
-    
-    // Final metrics update
-    const currentWPM = updateMetrics();
-    
-    // Check and update High Score
-    if (currentWPM > highScore) {
-        highScore = currentWPM;
-        localStorage.setItem('typingGameHighScore', highScore);
-        updateHighScoreDisplay();
-        playSound('success');
+        runtime.interval = setInterval(() => {
+            runtime.timer--;
+            timerElement.innerText = runtime.timer;
+            updateMetrics();
+            if (runtime.timer <= 0) endGame();
+        }, 1000);
     } else {
-        // Play success sound even if not high score, just for completion
-        playSound('success');
+        // Word Count Mode: Timer counts UP
+        runtime.timer = 0;
+        timerLabelElement.innerText = 'Time';
+        timerElement.innerText = 0;
+        runtime.interval = setInterval(() => {
+            runtime.timer++;
+            timerElement.innerText = runtime.timer;
+            updateMetrics(); 
+        }, 1000);
     }
 
-    showResultModal(currentWPM);
+    if (gameState.isGhostEnabled && bestRun) {
+        startGhostPlayback();
+    }
 }
 
-/**
- * Calculates and updates WPM and Accuracy.
- * Returns the calculated WPM.
- */
-function updateMetrics() {
-    const timeElapsed = maxTime - timer;
-    let wpm = 0;
+function startGhostPlayback() {
+    const ghostCursor = document.getElementById('ghost-cursor');
+    if (!ghostCursor) return;
     
-    // Prevent division by zero
+    const spans = quoteDisplayElement.querySelectorAll('span');
+    // Simple playback: schedule moves based on recorded timestamps
+    bestRun.keystrokes.forEach(stroke => {
+        setTimeout(() => {
+            if (!runtime.isStarted) return;
+            // Move ghost to index i
+            const targetSpan = spans[stroke.i];
+            if (targetSpan) {
+                // Position logic needs simple offset or class toggle
+                // Ideally, we move an absolute positioned div to the span's coordinates
+                const rect = targetSpan.getBoundingClientRect();
+                const parentRect = quoteDisplayElement.getBoundingClientRect();
+                ghostCursor.style.transform = `translate(${rect.left - parentRect.left}px, ${rect.top - parentRect.top}px)`;
+                ghostCursor.style.opacity = 1;
+            }
+        }, stroke.t);
+    });
+}
+
+function updateMetrics() {
+    let timeElapsed;
+    if (gameState.mode === 'time') {
+        timeElapsed = gameState.duration - runtime.timer;
+    } else {
+        timeElapsed = runtime.timer;
+    }
+    
+    let wpm = 0;
     if (timeElapsed > 0) {
-        // WPM = (Total Characters / 5) / (Time Elapsed in Minutes)
-        wpm = Math.round((totalCharactersTyped / 5) / (timeElapsed / 60));
+        wpm = Math.round((runtime.totalChars / 5) / (timeElapsed / 60));
         wpmElement.innerText = wpm;
     }
 
-    // Accuracy = (Correct Characters / Total Characters Typed) * 100
     let accuracy = 0;
-    if (totalCharactersTyped > 0) {
-        accuracy = Math.round((correctCharacters / totalCharactersTyped) * 100);
+    if (runtime.totalChars > 0) {
+        accuracy = Math.round((runtime.correctChars / runtime.totalChars) * 100);
     }
     accuracyElement.innerText = accuracy;
-    
     return wpm;
 }
 
-/**
- * Updates the High Score display.
- */
-function updateHighScoreDisplay() {
-    highScoreElement.innerText = highScore;
-}
-
-/**
- * Resets the game state to initial values.
- */
-function resetGame() {
-    clearInterval(timerInterval);
-    timer = maxTime;
-    timerElement.innerText = timer;
-    
-    isGameStarted = false;
-    totalCharactersTyped = 0;
-    correctCharacters = 0;
-    mistakes = 0;
-    
-    // Disable Focus Mode if active
+function endGame() {
+    clearInterval(runtime.interval);
+    typingInputElement.disabled = true;
     containerElement.classList.remove('focus-mode');
     
+    const finalWPM = updateMetrics();
+    
+    // Save History
+    const result = {
+        wpm: finalWPM,
+        accuracy: parseInt(accuracyElement.innerText),
+        date: new Date().toISOString(),
+        mode: gameState.mode
+    };
+    history.unshift(result);
+    if (history.length > 10) history.pop();
+    localStorage.setItem('typingGameHistory', JSON.stringify(history));
+    
+    // Check Best Run (Simple WPM check for now)
+    const currentHighScore = parseInt(localStorage.getItem('typingGameHighScore') || 0);
+    if (finalWPM > currentHighScore) {
+        localStorage.setItem('typingGameHighScore', finalWPM);
+        // Save Ghost Data
+        bestRun = { keystrokes: runtime.keystrokes, wpm: finalWPM };
+        localStorage.setItem('typingGameBestRun', JSON.stringify(bestRun));
+        playSound('success');
+    } else {
+        playSound('success');
+    }
+
+    updateHighScoreDisplay();
+    renderChart();
+    showResultModal(finalWPM);
+}
+
+function renderChart() {
+    // Simple SVG Line Chart
+    const data = history.map(h => h.wpm).reverse(); // Oldest to newest
+    if (data.length < 2) return;
+
+    const width = 300;
+    const height = 100;
+    const max = Math.max(...data, 100); // Scale to at least 100
+    const min = Math.min(...data, 0);
+    
+    const points = data.map((val, i) => {
+        const x = (i / (data.length - 1)) * width;
+        const y = height - ((val - min) / (max - min)) * height;
+        return `${x},${y}`;
+    }).join(' ');
+
+    const circles = data.map((val, i) => {
+         const x = (i / (data.length - 1)) * width;
+         const y = height - ((val - min) / (max - min)) * height;
+         return `<circle cx="${x}" cy="${y}" r="3" />`;
+    }).join('');
+
+    progressChart.innerHTML = `
+        <polyline points="${points}" />
+        ${circles}
+    `;
+}
+
+function resetGame() {
+    clearInterval(runtime.interval);
+    runtime.isStarted = false;
+    runtime.totalChars = 0;
+    runtime.correctChars = 0;
+    runtime.mistakes = 0;
+    runtime.keystrokes = [];
+    
+    timerElement.innerText = gameState.mode === 'time' ? gameState.duration : 0;
     wpmElement.innerText = 0;
     accuracyElement.innerText = 100;
     mistakesElement.innerText = 0;
-    updateHighScoreDisplay();
     
+    containerElement.classList.remove('focus-mode');
     typingInputElement.disabled = false;
-    
-    // Hide modal if open
     resultModal.classList.remove('show');
+    settingsModal.classList.remove('show');
+    
+    // Update UI Badges
+    timeBadge.innerText = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} Words`;
+    ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
     
     renderNewQuote();
     typingInputElement.focus();
 }
 
-/**
- * Toggles Hard Mode class on the quote display
- */
-function toggleHardMode() {
-    isHardMode = hardModeToggle.checked;
-    if (isHardMode) {
-        quoteDisplayElement.classList.add('blurred');
-    } else {
-        quoteDisplayElement.classList.remove('blurred');
+// --- UI Handlers ---
+
+// Settings Logic
+function openSettings() {
+    settingsModal.classList.add('show');
+}
+function closeSettings() {
+    settingsModal.classList.remove('show');
+    // Apply logic is effectively immediate as we update state on click
+    resetGame(); // Restart with new settings
+}
+
+// Toggle logic for pills
+function handlePillClick(e, group) {
+    if (!e.target.classList.contains('pill')) return;
+    const parent = e.currentTarget;
+    parent.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    e.target.classList.add('active');
+    
+    const val = e.target.dataset.value;
+    if (group === 'mode') {
+        gameState.mode = val;
+        if (val === 'time') {
+            timerSettingGroup.classList.remove('hidden');
+            wordCountSettingGroup.classList.add('hidden');
+        } else {
+            timerSettingGroup.classList.add('hidden');
+            wordCountSettingGroup.classList.remove('hidden');
+        }
+    } else if (group === 'duration') {
+        gameState.duration = parseInt(val);
+    } else if (group === 'wordCount') {
+        gameState.wordCount = parseInt(val);
     }
-    // Focus input after toggle so user can keep typing/start
-    typingInputElement.focus();
 }
 
-/**
- * Changes the quote category and resets the game
- */
-function changeCategory() {
-    currentCategory = categorySelect.value;
-    resetGame();
+// --- Initializers ---
+function init() {
+    updateHighScoreDisplay();
+    renderNewQuote();
+    
+    // Events
+    typingInputElement.addEventListener('input', handleInput);
+    resetButton.addEventListener('click', resetGame);
+    
+    // Settings Events
+    settingsBtn.addEventListener('click', openSettings);
+    closeSettingsBtn.addEventListener('click', closeSettings);
+    
+    modeSelector.addEventListener('click', (e) => handlePillClick(e, 'mode'));
+    durationSelector.addEventListener('click', (e) => handlePillClick(e, 'duration'));
+    wordCountSelector.addEventListener('click', (e) => handlePillClick(e, 'wordCount'));
+    
+    categorySelect.addEventListener('change', (e) => {
+        gameState.category = e.target.value;
+        resetGame();
+    });
+    
+    // Toggles
+    soundToggle.addEventListener('change', (e) => gameState.isSoundEnabled = e.target.checked);
+    hardModeToggle.addEventListener('change', (e) => {
+        gameState.isHardMode = e.target.checked;
+        if (gameState.isHardMode) quoteDisplayElement.classList.add('blurred');
+        else quoteDisplayElement.classList.remove('blurred');
+    });
+    ghostModeToggle.addEventListener('change', (e) => gameState.isGhostEnabled = e.target.checked);
+    
+    // Result Modal
+    shareBtn.addEventListener('click', () => {
+        /* Share Logic */
+        const text = `I just typed ${wpmElement.innerText} WPM on TypeSpeed!`;
+        navigator.clipboard.writeText(text);
+        shareBtn.innerText = 'Copied!';
+        setTimeout(() => shareBtn.innerText = 'Share Result', 2000);
+    });
+    playAgainBtn.addEventListener('click', resetGame);
+
+    // Keyboard
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            resetGame();
+        }
+    });
 }
 
-/**
- * Shows the result modal
- */
+function updateHighScoreDisplay() {
+    highScoreElement.innerText = localStorage.getItem('typingGameHighScore') || 0;
+}
+
 function showResultModal(wpm) {
     modalWpmElement.innerText = wpm;
     modalAccuracyElement.innerText = accuracyElement.innerText + '%';
     resultModal.classList.add('show');
 }
 
-/**
- * Shares result to clipboard
- */
-function shareResult() {
-    const text = `I just typed ${modalWpmElement.innerText} WPM with ${modalAccuracyElement.innerText} accuracy on TypeSpeed!`;
-    navigator.clipboard.writeText(text).then(() => {
-        const originalText = shareBtn.innerText;
-        shareBtn.innerText = 'Copied!';
-        setTimeout(() => {
-            shareBtn.innerText = originalText;
-        }, 2000);
-    });
-}
-
-
-// --- Event Listeners ---
-typingInputElement.addEventListener('input', handleInput);
-
-// Prevent pasting (Anti-cheat)
-typingInputElement.addEventListener('paste', (e) => {
-    e.preventDefault();
-    alert("No pasting allowed! Type it out properly.");
-});
-
-resetButton.addEventListener('click', resetGame);
-
-// Hard Mode Toggle
-hardModeToggle.addEventListener('change', toggleHardMode);
-
-// Category Select
-categorySelect.addEventListener('change', changeCategory);
-
-// Modal Buttons
-shareBtn.addEventListener('click', shareResult);
-playAgainBtn.addEventListener('click', resetGame);
-
-// Keyboard shortcuts
-document.addEventListener('keydown', (e) => {
-    // Tab to restart
-    if (e.key === 'Tab') {
-        e.preventDefault(); // Prevent focus shift
-        resetGame();
-    }
-});
-
-// Initialize the first game
-updateHighScoreDisplay();
-renderNewQuote();
+init();

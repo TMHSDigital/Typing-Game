@@ -7,7 +7,8 @@ TypeSpeed is a modern, high-performance typing speed test application built with
 ### Core Gameplay
 - **Real-time Metrics**: Tracks Words Per Minute (WPM), Accuracy, and Mistakes instantly as you type.
 - **High Score Tracking**: Automatically persists your personal best WPM using local storage.
-- **Timer**: Standard 60-second sprint mode.
+- **Timer**: Configurable timer settings (15s, 30s, 60s).
+- **Word Count Mode**: Alternative game mode where you race to complete a fixed number of words (10, 25, 50).
 - **Anti-Cheat**: Paste events are blocked to ensure fair play.
 - **Instant Restart**: Press `Tab` to quickly reset the game.
 
@@ -15,27 +16,24 @@ TypeSpeed is a modern, high-performance typing speed test application built with
 - **Quote Categories**: Choose between:
   - **General**: Standard English sentences.
   - **Technology**: Tech-focused quotes and wisdom.
-  - **Code Snippets**: Challenge yourself with real JavaScript/React syntax (brackets, semicolons, etc.).
-- **Hard Mode**: Toggling this blurs the future text, forcing you to memorize words and type with flow rather than reading character-by-character.
-- **Sound Effects**: 
-  - Mechanical click feedback for correct keystrokes.
-  - Subtle "buzz" for errors.
-  - Success chime upon completion.
-  - Toggleable via the "Sound" switch.
+  - **Code Snippets**: Challenge yourself with real JavaScript/React syntax.
+- **Hard Mode**: Blurs the future text, forcing you to type with flow and memory.
+- **Ghost Mode**: Compete against your own best run with a visual ghost cursor that replays your past performance in real-time.
+- **Progress Tracking**: Visual line chart of your last 10 games displayed in the results modal.
 
 ### UI/UX Design
 - **Glassmorphism Theme**: A deep, animated gradient background with frosted glass containers.
-- **Focus Mode**: The UI (header, stats, footer) dims automatically when you start typing to reduce distractions.
-- **Neon Aesthetics**: High-contrast text effects and a glowing cursor for maximum legibility.
-- **Result Modal**: A clean summary screen appears after each game with options to share your score or play again.
+- **Settings Hub**: A dedicated settings modal to customize every aspect of the experience without cluttering the main HUD.
+- **Focus Mode**: The UI dims automatically when typing starts.
+- **Sound Effects**: Satisfying mechanical click feedback, synthesized via the Web Audio API.
 
 ## File Structure
 
 The project is entirely self-contained:
 
-- `index.html`: Semantic HTML5 structure including the game HUD, typing area, and modal.
-- `style.css`: Comprehensive CSS3 styling using CSS Variables for theming, Flexbox/Grid for layout, and keyframe animations.
-- `script.js`: Vanilla JS logic handling the game loop, audio synthesis (`AudioContext`), DOM manipulation, and state management.
+- `index.html`: Semantic HTML5 structure including the game HUD, typing area, and modals.
+- `style.css`: Comprehensive CSS3 styling using CSS Variables for theming and Flexbox/Grid for layout.
+- `script.js`: Vanilla JS logic handling the game loop, audio synthesis, ghost recording/playback, and chart generation.
 
 ## Setup & Usage
 
@@ -43,14 +41,14 @@ No build steps or installation required.
 
 1. **Clone the repository** or download the source code.
 2. **Open `index.html`** in any modern web browser.
-3. **Start Typing**: The timer begins on your first keystroke.
+3. **Start Typing**: The game begins on your first keystroke.
 
 ## Tech Stack & Design Choices
 
-- **Vanilla JavaScript**: chosen for performance and zero-dependency portability.
-- **AudioContext API**: Used to synthesize sound effects on the fly, keeping the project asset-free (no external `.mp3` files needed).
-- **CSS Glassmorphism**: Utilizes `backdrop-filter: blur()` and semi-transparent backgrounds to create a modern, layered depth effect.
-- **Local Storage**: Provides a lightweight way to save user progress (High Score) without a backend.
+- **Vanilla JavaScript**: Chosen for performance and zero-dependency portability.
+- **SVG Charts**: Custom-built SVG generation for the progress chart, avoiding heavy charting libraries.
+- **AudioContext API**: Used to synthesize sound effects on the fly.
+- **Local Storage**: Persists history, high scores, and best-run data for Ghost Mode.
 
 ## Deployment
 
