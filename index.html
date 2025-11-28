@@ -4,34 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vanilla JS Typing Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="background-glow"></div>
     <div class="container">
         <header>
-            <h1>Typing Speed Test</h1>
+            <h1>TYPE<span class="accent">SPEED</span></h1>
         </header>
 
         <div class="game-area">
             <div id="stats-bar" class="stats">
                 <div class="stat-item">
-                    <span class="label">Time:</span>
-                    <span id="timer" class="value">60</span>s
+                    <span class="label">Time</span>
+                    <span id="timer" class="value">60</span>
+                    <span class="unit">s</span>
                 </div>
-                <div class="stat-item">
-                    <span class="label">WPM:</span>
+                <div class="stat-item primary">
+                    <span class="label">WPM</span>
                     <span id="wpm" class="value">0</span>
                 </div>
                 <div class="stat-item">
-                    <span class="label">Accuracy:</span>
-                    <span id="accuracy" class="value">100</span>%
+                    <span class="label">Accuracy</span>
+                    <span id="accuracy" class="value">100</span>
+                    <span class="unit">%</span>
                 </div>
                 <div class="stat-item">
-                    <span class="label">Mistakes:</span>
+                    <span class="label">Mistakes</span>
                     <span id="mistakes" class="value">0</span>
                 </div>
-                <div class="stat-item">
-                    <span class="label">High Score:</span>
+                <div class="stat-item highlight">
+                    <span class="label">Best</span>
                     <span id="high-score" class="value">0</span>
                 </div>
             </div>
@@ -39,21 +45,29 @@
             <div class="controls">
                  <label class="toggle-label">
                     <input type="checkbox" id="hard-mode-toggle">
-                    Hard Mode (Hide Text)
+                    <span class="toggle-custom"></span>
+                    Hard Mode
                 </label>
             </div>
 
-            <div id="quote-display" class="quote-display">
-                <!-- Quote characters will be injected here -->
+            <div class="typing-container">
+                <div id="quote-display" class="quote-display">
+                    <!-- Quote characters will be injected here -->
+                </div>
+                <textarea id="typing-input" class="typing-input" placeholder="Type here..." autofocus></textarea>
             </div>
-
-            <textarea id="typing-input" class="typing-input" placeholder="Start typing here..." autofocus></textarea>
             
-            <button id="reset-button" class="reset-btn" title="Press Tab to restart">Restart Game</button>
+            <button id="reset-button" class="reset-btn" title="Press Tab to restart">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                Restart
+            </button>
         </div>
 
         <footer>
-            <p>Built with Vanilla JS</p>
+            <p>tab to restart</p>
         </footer>
     </div>
 

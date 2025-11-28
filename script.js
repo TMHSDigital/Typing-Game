@@ -13,6 +13,7 @@ const mistakesElement = document.getElementById('mistakes');
 const highScoreElement = document.getElementById('high-score');
 const resetButton = document.getElementById('reset-button');
 const hardModeToggle = document.getElementById('hard-mode-toggle');
+const containerElement = document.querySelector('.container');
 
 // --- Word Source ---
 // Hardcoded array of quotes to ensure offline functionality
@@ -82,6 +83,8 @@ function handleInput(e) {
     // Start timer on first keypress
     if (!isGameStarted) {
         startTimer();
+        // Enable Focus Mode
+        containerElement.classList.add('focus-mode');
     }
 
     const arrayQuote = quoteDisplayElement.querySelectorAll('span');
@@ -89,8 +92,6 @@ function handleInput(e) {
     const inputLength = arrayValue.length;
     
     // Mistake Tracking Logic:
-    // If the input length increased (user typed a character)
-    // Check if the last typed character is incorrect
     if (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') {
         const currentInd = inputLength - 1;
         if (currentInd < arrayQuote.length) {
@@ -170,6 +171,9 @@ function endGame() {
     clearInterval(timerInterval);
     typingInputElement.disabled = true;
     
+    // Disable Focus Mode
+    containerElement.classList.remove('focus-mode');
+    
     // Final metrics update
     const currentWPM = updateMetrics();
     
@@ -225,6 +229,9 @@ function resetGame() {
     totalCharactersTyped = 0;
     correctCharacters = 0;
     mistakes = 0;
+    
+    // Disable Focus Mode if active
+    containerElement.classList.remove('focus-mode');
     
     wpmElement.innerText = 0;
     accuracyElement.innerText = 100;
