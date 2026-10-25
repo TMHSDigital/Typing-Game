@@ -687,6 +687,9 @@ function handleInput() {
         span.classList.toggle('incorrect', isTyped && typed[index] !== quote[index]);
         span.classList.toggle('current', index === typed.length);
     }
+    // Reading the caret's position costs a layout per keystroke, so only
+    // touch screens, where an on-screen keyboard can cover it, pay for it.
+    if (coarsePointer.matches) keepCurrentInView();
 
     updateGhostStatus();
 
@@ -706,6 +709,23 @@ function handleInput() {
             endGame();
         }
     }
+}
+
+// An on-screen keyboard shrinks the visual viewport but not the page, so
+// the line being typed can end up behind it. Scroll the page until the
+// current character is inside the visible part, with a line of margin.
+const coarsePointer = window.matchMedia('(pointer: coarse)');
+
+function keepCurrentInView() {
+    const viewport = window.visualViewport;
+    const current = quoteDisplayElement.querySelector('.current');
+    if (!viewport || !current) return;
+    const rect = current.getBoundingClientRect();
+    const margin = rect.height;
+    const top = viewport.offsetTop + margin;
+    const bottom = viewport.offsetTop + viewport.height - margin;
+    if (rect.bottom > bottom) window.scrollBy(0, rect.bottom - bottom);
+    else if (rect.top < top) window.scrollBy(0, rect.top - top);
 }
 
 function elapsedMs() {
@@ -1928,6 +1948,12 @@ function init() {
     // A link opened in a tab that already has the page only changes the
     // hash. clearChallengeHash uses replaceState, which does not fire this.
     window.addEventListener('hashchange', loadChallengeFromHash);
+    // The on-screen keyboard opening or closing resizes the visual viewport.
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            if (document.activeElement === typingInputElement) keepCurrentInView();
+        });
+    }
 
     resetGame();
     loadChallengeFromHash();

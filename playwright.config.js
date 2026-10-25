@@ -17,9 +17,13 @@ module.exports = defineConfig({
         url: 'http://127.0.0.1:8765/index.html',
         reuseExistingServer: !process.env.CI,
     },
+    // Desktop projects run everything except the phone tests in
+    // mobile.spec.js; the phone projects run only those.
     projects: [
-        { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-        { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-        { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+        { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /mobile\.spec/ },
+        { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: /mobile\.spec/ },
+        { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: /mobile\.spec/ },
+        { name: 'pixel-7', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec/ },
+        { name: 'iphone-15', use: { ...devices['iPhone 15'] }, testMatch: /mobile\.spec/ },
     ],
 });

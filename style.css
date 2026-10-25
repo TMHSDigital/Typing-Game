@@ -591,6 +591,17 @@ input:checked + .toggle-custom::after {
     cursor: default;
     z-index: 10; /* Above display to capture clicks */
     resize: none;
+    /* Laid out like the passage, so the input's own caret sits on the line
+       being typed. Browsers scroll that caret into view, above an
+       on-screen keyboard; elsewhere they would scroll back to its top. */
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    font-family: var(--font-code);
+    font-size: 1.5rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .ghost-status {
@@ -756,6 +767,22 @@ footer {
 
     .control-group.right {
         justify-content: space-between;
+    }
+
+    /* Phones: the page starts at the top, and during a run the controls
+       and secondary stats make room for the passage. The margin below lets
+       the page scroll the line being typed above an on-screen keyboard. */
+    body {
+        align-items: flex-start;
+    }
+
+    .container.focus-mode .controls,
+    .container.focus-mode .stats-side {
+        display: none;
+    }
+
+    .container.focus-mode {
+        margin-bottom: 60vh;
     }
 }
 
