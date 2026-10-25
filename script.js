@@ -75,6 +75,10 @@ const hardModeToggle = document.getElementById('hard-mode-toggle-settings');
 const ghostModeToggle = document.getElementById('ghost-mode-toggle');
 const paceSelect = document.getElementById('pace-select');
 const paceWpmInput = document.getElementById('pace-wpm');
+const fontSelect = document.getElementById('font-select');
+const textSizeSelect = document.getElementById('text-size-select');
+const lineSpacingSelect = document.getElementById('line-spacing-select');
+const caretSelect = document.getElementById('caret-select');
 const punctuationToggle = document.getElementById('punctuation-toggle');
 const numbersToggle = document.getElementById('numbers-toggle');
 const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
@@ -176,10 +180,23 @@ const DEFAULT_SETTINGS = {
     codeLanguage: 'javascript', // key of CODE_SNIPPETS (texts.js)
     isAutoIndent: true, // fill in leading spaces after a new line in code
     theme: 'system', // 'system', 'dark', 'light', or 'contrast'
+    passageFont: 'mono', // values of these four in PASSAGE_STYLES
+    textSize: 'medium',
+    lineSpacing: 'normal',
+    caretStyle: 'underline',
 };
 
 const THEMES = ['system', 'dark', 'light', 'contrast'];
 const PACES = ['off', 'target', 'average', 'last'];
+
+// How the passage looks. Each is set as a data attribute of the same name on
+// <html>, which style.css reads; theme.js does the same before first paint.
+const PASSAGE_STYLES = {
+    passageFont: ['mono', 'sans', 'dyslexic'],
+    textSize: ['medium', 'small', 'large', 'xlarge'],
+    lineSpacing: ['normal', 'compact', 'wide'],
+    caretStyle: ['underline', 'line', 'block'],
+};
 const PACE_MIN = 10;
 const PACE_MAX = 300;
 
@@ -222,6 +239,9 @@ function sanitizeSettings(saved) {
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    for (const [setting, values] of Object.entries(PASSAGE_STYLES)) {
+        if (values.includes(saved[setting])) settings[setting] = saved[setting];
+    }
     if (Number.isInteger(saved.paceWpm) && saved.paceWpm >= PACE_MIN && saved.paceWpm <= PACE_MAX) {
         settings.paceWpm = saved.paceWpm;
     }
@@ -1582,6 +1602,10 @@ function applySettingsToUI() {
     paceSelect.value = gameState.pace;
     paceWpmInput.value = gameState.paceWpm;
     paceWpmInput.hidden = gameState.pace !== 'target';
+    fontSelect.value = gameState.passageFont;
+    textSizeSelect.value = gameState.textSize;
+    lineSpacingSelect.value = gameState.lineSpacing;
+    caretSelect.value = gameState.caretStyle;
     punctuationToggle.checked = gameState.hasPunctuation;
     numbersToggle.checked = gameState.hasNumbers;
     stopOnErrorToggle.checked = gameState.isStopOnError;
@@ -1590,6 +1614,7 @@ function applySettingsToUI() {
     customTextInput.value = gameState.customText;
     quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);
     applyTheme();
+    applyPassageStyle();
 }
 
 // Settings changes reset the game on close anyway, so a run in progress is
@@ -1640,6 +1665,12 @@ function applyTheme() {
         else theme = prefersLight.matches ? 'light' : 'dark';
     }
     document.documentElement.dataset.theme = theme;
+}
+
+function applyPassageStyle() {
+    for (const setting of Object.keys(PASSAGE_STYLES)) {
+        document.documentElement.dataset[setting] = gameState[setting];
+    }
 }
 
 function applyPill(group, value) {
@@ -2148,6 +2179,19 @@ function init() {
         gameState.pace = e.target.value;
         paceWpmInput.hidden = gameState.pace !== 'target';
     });
+    // Shown behind the dialog at once; saved when it closes.
+    const passageSelects = [
+        [fontSelect, 'passageFont'],
+        [textSizeSelect, 'textSize'],
+        [lineSpacingSelect, 'lineSpacing'],
+        [caretSelect, 'caretStyle'],
+    ];
+    for (const [select, setting] of passageSelects) {
+        select.addEventListener('change', (e) => {
+            gameState[setting] = e.target.value;
+            applyPassageStyle();
+        });
+    }
     paceWpmInput.addEventListener('change', (e) => {
         const wpm = Math.round(Number(e.target.value));
         if (Number.isFinite(wpm)) gameState.paceWpm = Math.min(PACE_MAX, Math.max(PACE_MIN, wpm));

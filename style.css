@@ -13,10 +13,23 @@
     font-display: swap;
 }
 
+/* Only downloaded when the passage font setting picks it */
+@font-face {
+    font-family: 'OpenDyslexic';
+    src: url('fonts/opendyslexic-latin.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
 :root {
     /* Fonts */
     --font-ui: 'Space Grotesk', sans-serif;
     --font-code: 'JetBrains Mono', monospace;
+
+    /* Passage text, set from Settings through data attributes on <html> */
+    --passage-font: var(--font-code);
+    --passage-size: 1.5rem;
+    --passage-line-height: 1.7;
 
     /* Deep Dark Tech Theme */
     --bg-dark: #0f172a;
@@ -58,6 +71,7 @@
     --glow-correct: rgba(255, 255, 255, 0.2);
     --glow-error: rgba(248, 113, 113, 0.3);
     --current-bg: rgba(45, 212, 191, 0.15);
+    --caret-block: rgba(45, 212, 191, 0.4);
     --scrim: rgba(15, 23, 42, 0.75);
     --scrim-strong: rgba(15, 23, 42, 0.8);
     --ghost-fill: rgba(255, 255, 255, 0.3);
@@ -69,6 +83,34 @@
     --radius-lg: 24px;
     --radius-md: 12px;
     --radius-sm: 6px;
+}
+
+:root[data-passage-font='sans'] {
+    --passage-font: var(--font-ui);
+}
+
+:root[data-passage-font='dyslexic'] {
+    --passage-font: 'OpenDyslexic', var(--font-code);
+}
+
+:root[data-text-size='small'] {
+    --passage-size: 1.2rem;
+}
+
+:root[data-text-size='large'] {
+    --passage-size: 1.9rem;
+}
+
+:root[data-text-size='xlarge'] {
+    --passage-size: 2.4rem;
+}
+
+:root[data-line-spacing='compact'] {
+    --passage-line-height: 1.45;
+}
+
+:root[data-line-spacing='wide'] {
+    --passage-line-height: 2.1;
 }
 
 /* Themes. data-theme is set on <html> by theme.js before the first paint
@@ -103,6 +145,7 @@
     --glow-correct: transparent;
     --glow-error: transparent;
     --current-bg: rgba(15, 118, 110, 0.12);
+    --caret-block: rgba(15, 118, 110, 0.25);
     --scrim: rgba(241, 245, 249, 0.85);
     --scrim-strong: rgba(226, 232, 240, 0.85);
     --ghost-fill: rgba(15, 23, 42, 0.35);
@@ -141,6 +184,7 @@
     --glow-correct: transparent;
     --glow-error: transparent;
     --current-bg: rgba(0, 229, 255, 0.25);
+    --caret-block: rgba(0, 229, 255, 0.45);
     --scrim: rgba(0, 0, 0, 0.85);
     --scrim-strong: rgba(0, 0, 0, 0.9);
     --ghost-fill: rgba(255, 255, 255, 0.7);
@@ -536,9 +580,9 @@ input:checked + .toggle-custom::after {
 
 .quote-display {
     position: relative; /* Anchor for the ghost cursor */
-    font-family: var(--font-code);
-    font-size: 1.5rem;
-    line-height: 1.7;
+    font-family: var(--passage-font);
+    font-size: var(--passage-size);
+    line-height: var(--passage-line-height);
     min-height: 120px;
     color: var(--text-ghost);
     white-space: pre-wrap;
@@ -601,6 +645,24 @@ input:checked + .toggle-custom::after {
     animation: blink 1s step-end infinite;
 }
 
+/* Caret setting: a bar before the character, or a block over it */
+:root[data-caret-style='line'] .current::before {
+    left: -1px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    height: auto;
+}
+
+:root[data-caret-style='block'] .current::before {
+    top: 0;
+    bottom: 0;
+    height: auto;
+    background-color: var(--caret-block);
+    box-shadow: none;
+    z-index: -1; /* Behind the character */
+}
+
 @keyframes blink {
     0%,
     100% {
@@ -628,9 +690,9 @@ input:checked + .toggle-custom::after {
     padding: 0;
     border: 0;
     overflow: hidden;
-    font-family: var(--font-code);
-    font-size: 1.5rem;
-    line-height: 1.7;
+    font-family: var(--passage-font);
+    font-size: var(--passage-size);
+    line-height: var(--passage-line-height);
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -690,7 +752,7 @@ input:checked + .toggle-custom::after {
     top: 0;
     left: 0;
     width: 2px;
-    height: 1.5rem;
+    height: 1em; /* The passage's font size */
     background-color: var(--ghost-fill);
     border: 1px dashed var(--ghost-border);
     pointer-events: none;

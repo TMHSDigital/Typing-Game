@@ -2374,6 +2374,113 @@ test.describe('themes', () => {
     });
 });
 
+test.describe('passage appearance', () => {
+    test('font, size, spacing, and caret are saved and applied before the page script runs', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        await page.locator('#settings-btn').click();
+        await page.locator('#font-select').selectOption('sans');
+        await page.locator('#text-size-select').selectOption('large');
+        await page.locator('#line-spacing-select').selectOption('wide');
+        await page.locator('#caret-select').selectOption('line');
+        // Shown behind the dialog at once. Browsers round these differently.
+        const size = (property) =>
+            page
+                .locator('#quote-display')
+                .evaluate((el, name) => parseFloat(getComputedStyle(el)[name]), property);
+        expect(await size('fontSize')).toBeCloseTo(30.4, 1);
+        await page.keyboard.press('Escape');
+
+        // Block script.js: theme.js alone must apply the saved settings.
+        await page.route('**/script.js', (route) => route.abort());
+        await page.reload();
+        const html = page.locator('html');
+        await expect(html).toHaveAttribute('data-passage-font', 'sans');
+        await expect(html).toHaveAttribute('data-text-size', 'large');
+        await expect(html).toHaveAttribute('data-line-spacing', 'wide');
+        await expect(html).toHaveAttribute('data-caret-style', 'line');
+        const display = page.locator('#quote-display');
+        await expect(display).toHaveCSS('font-family', /Space Grotesk/);
+        expect(await size('fontSize')).toBeCloseTo(30.4, 1);
+        expect(await size('lineHeight')).toBeCloseTo(30.4 * 2.1, 1);
+    });
+
+    test('unknown values fall back to the defaults', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ passageFont: 'comic', textSize: 99, caretStyle: null })
+            );
+        });
+        await page.goto('/');
+        await expect(page.locator('#quote-display')).toHaveCSS('font-family', /JetBrains Mono/);
+        await expect(page.locator('#quote-display')).toHaveCSS('font-size', '24px');
+        await expect(page.locator('#font-select')).toHaveValue('mono');
+        await expect(page.locator('#caret-select')).toHaveValue('underline');
+    });
+
+    for (const [font, family] of [
+        ['mono', 'JetBrains Mono'],
+        ['sans', 'Space Grotesk'],
+        ['dyslexic', 'OpenDyslexic'],
+    ]) {
+        test(`${font} at the largest size: the ghost lines up and the text passes the contrast check`, async ({
+            page,
+        }) => {
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await page.addInitScript((value) => {
+                localStorage.setItem(
+                    'typingGameBests',
+                    JSON.stringify({
+                        'time:60s:common': { wpm: 40, keystrokes: [{ t: 0, i: 30 }] },
+                    })
+                );
+                localStorage.setItem(
+                    'typingGameSettings',
+                    JSON.stringify({
+                        isGhostEnabled: true,
+                        passageFont: value,
+                        textSize: 'xlarge',
+                        caretStyle: 'block',
+                    })
+                );
+            }, font);
+            await page.goto('/');
+            // The font file loads and is used.
+            await page.waitForFunction((name) => document.fonts.check(`24px "${name}"`), family);
+            await expect(page.locator('#quote-display')).toHaveCSS(
+                'font-family',
+                new RegExp(`^"?${family}`)
+            );
+            const quote = await currentQuote(page);
+            await input(page).pressSequentially(quote.slice(0, 3));
+            await input(page).press(quote[3] === 'x' ? 'y' : 'x');
+            await expect(page.locator('#ghost-cursor')).toHaveCSS('opacity', '1');
+
+            const placement = await page.evaluate(() => {
+                const span = document.querySelectorAll('#quote-display span')[30];
+                const cursor = document.getElementById('ghost-cursor').getBoundingClientRect();
+                const box = span.getBoundingClientRect();
+                return {
+                    left: Math.abs(cursor.left - box.left),
+                    top: Math.abs(cursor.top - box.top),
+                };
+            });
+            expect(placement.left).toBeLessThan(1);
+            expect(placement.top).toBeLessThan(1);
+
+            const results = await new AxeBuilder({ page })
+                .withRules(['color-contrast'])
+                .include('.typing-container')
+                .analyze();
+            expect(
+                results.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ')))
+            ).toEqual([]);
+        });
+    }
+});
+
 test('works offline after one visit', async ({ browser }) => {
     const context = await browser.newContext({ serviceWorkers: 'allow' });
     const page = await context.newPage();
