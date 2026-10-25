@@ -275,66 +275,77 @@
             aria-labelledby="result-title"
             aria-describedby="result-stats"
         >
-            <div class="modal-content">
-                <h2 id="result-title">Result</h2>
-                <div class="modal-stats" id="result-stats">
-                    <div class="modal-stat">
-                        <span class="label">WPM</span>
-                        <span id="modal-wpm" class="value">0</span>
-                    </div>
-                    <div class="modal-stat">
-                        <span class="label">Accuracy</span>
-                        <span id="modal-accuracy" class="value">0%</span>
-                    </div>
+            <div class="modal-content result-content">
+                <h2 id="result-title" class="result-title">Result</h2>
+                <div id="result-stats">
+                    <p class="result-headline">
+                        <span id="modal-wpm" class="headline-value">0</span>
+                        <span class="headline-unit">WPM</span>
+                    </p>
+                    <dl class="modal-details">
+                        <div>
+                            <dt>Accuracy</dt>
+                            <dd id="modal-accuracy">0%</dd>
+                        </div>
+                        <div>
+                            <dt>Raw WPM</dt>
+                            <dd id="modal-raw">0</dd>
+                        </div>
+                        <div>
+                            <dt>Correct / wrong</dt>
+                            <dd id="modal-chars">0</dd>
+                        </div>
+                        <div>
+                            <dt>Time</dt>
+                            <dd id="modal-time">0s</dd>
+                        </div>
+                    </dl>
                 </div>
 
                 <p id="modal-best" class="modal-best"></p>
-
-                <dl class="modal-details">
-                    <div>
-                        <dt>Raw WPM</dt>
-                        <dd id="modal-raw">0</dd>
-                    </div>
-                    <div>
-                        <dt>Characters</dt>
-                        <dd id="modal-chars">0</dd>
-                    </div>
-                    <div>
-                        <dt>Time</dt>
-                        <dd id="modal-time">0s</dd>
-                    </div>
-                </dl>
-
                 <p id="modal-challenge" class="modal-challenge hidden"></p>
-                <p id="modal-keys" class="modal-keys"></p>
+                <p class="modal-keys">
+                    <span id="modal-keys"></span>
+                    <button id="practice-btn" class="link-btn hidden">Practice weak keys</button>
+                </p>
 
                 <p id="modal-source" class="modal-source hidden"></p>
 
                 <div class="chart-row">
                     <div id="run-chart-container" class="chart-container hidden">
-                        <h3>This run</h3>
-                        <svg
-                            id="run-chart"
-                            width="100%"
-                            height="100"
-                            viewBox="0 0 300 100"
-                            preserveAspectRatio="none"
-                            aria-hidden="true"
-                        ></svg>
-                        <p id="run-chart-caption" class="chart-caption"></p>
+                        <h3>Raw WPM by second</h3>
+                        <div class="chart-plot">
+                            <span class="chart-y-max"></span>
+                            <span class="chart-y-min"></span>
+                            <svg
+                                id="run-chart"
+                                width="100%"
+                                height="100"
+                                viewBox="0 0 300 100"
+                                preserveAspectRatio="none"
+                                aria-hidden="true"
+                            ></svg>
+                            <span class="chart-x-start"></span>
+                            <span class="chart-x-end"></span>
+                        </div>
                     </div>
 
                     <div id="progress-chart-container" class="chart-container hidden">
-                        <h3>Progress</h3>
-                        <svg
-                            id="progress-chart"
-                            width="100%"
-                            height="100"
-                            viewBox="0 0 300 100"
-                            preserveAspectRatio="none"
-                            aria-hidden="true"
-                        ></svg>
-                        <p id="chart-caption" class="chart-caption"></p>
+                        <h3 id="progress-chart-title">WPM, recent runs</h3>
+                        <div class="chart-plot">
+                            <span class="chart-y-max"></span>
+                            <span class="chart-y-min"></span>
+                            <svg
+                                id="progress-chart"
+                                width="100%"
+                                height="100"
+                                viewBox="0 0 300 100"
+                                preserveAspectRatio="none"
+                                aria-hidden="true"
+                            ></svg>
+                            <span class="chart-x-start"></span>
+                            <span class="chart-x-end"></span>
+                        </div>
                     </div>
                 </div>
 
@@ -343,15 +354,12 @@
                     <input id="challenge-link" type="text" readonly />
                 </label>
 
-                <div class="modal-actions">
-                    <button id="share-btn" class="action-btn secondary">Share Result</button>
-                    <button id="challenge-btn" class="action-btn secondary">
+                <div class="modal-actions result-actions">
+                    <button id="share-btn" class="action-btn tertiary">Share result</button>
+                    <button id="challenge-btn" class="action-btn tertiary">
                         Copy challenge link
                     </button>
-                    <button id="practice-btn" class="action-btn secondary hidden">
-                        Practice weak keys
-                    </button>
-                    <button id="play-again-btn" class="action-btn primary">Play Again</button>
+                    <button id="play-again-btn" class="action-btn primary">Play again</button>
                 </div>
             </div>
         </div>

@@ -23,6 +23,7 @@ const ghostBadge = document.getElementById('ghost-badge');
 // Modals
 const resultModal = document.getElementById('result-modal');
 const settingsModal = document.getElementById('settings-modal');
+const resultTitle = document.getElementById('result-title');
 const modalWpmElement = document.getElementById('modal-wpm');
 const modalAccuracyElement = document.getElementById('modal-accuracy');
 const modalSourceElement = document.getElementById('modal-source');
@@ -82,8 +83,7 @@ const ghostStatus = document.getElementById('ghost-status');
 const chartContainer = document.getElementById('progress-chart-container');
 const runChartContainer = document.getElementById('run-chart-container');
 const runChart = document.getElementById('run-chart');
-const runChartCaption = document.getElementById('run-chart-caption');
-const chartCaption = document.getElementById('chart-caption');
+const progressChartTitle = document.getElementById('progress-chart-title');
 const progressChart = document.getElementById('progress-chart');
 
 // --- Storage ---
@@ -909,21 +909,18 @@ function renderChart() {
         .slice(0, CHART_POINTS)
         .map((h) => h.wpm)
         .reverse(); // oldest to newest
-    chartContainer.classList.toggle('hidden', data.length < 2);
-    if (data.length < 2) return;
+    // Two points only draw a line between them, so the chart waits for three.
+    chartContainer.classList.toggle('hidden', data.length < 3);
+    if (data.length < 3) return;
 
-    const { min, max } = drawLineChart(progressChart, data, true);
-
-    const label = data.length === 1 ? 'run' : 'runs';
-    chartCaption.textContent =
-        min === max
-            ? `Last ${data.length} ${label} at these settings, ${min} WPM`
-            : `Last ${data.length} ${label} at these settings, ${min} to ${max} WPM`;
+    drawLineChart(progressChart, data, true, ['oldest', 'latest']);
+    progressChartTitle.textContent = `WPM, last ${data.length} runs`;
 }
 
-// Draws numbers as a polyline in a 300x100 viewBox. Only numbers reach
-// innerHTML. Returns the range so callers can caption the chart.
-function drawLineChart(svg, data, withDots) {
+// Draws numbers as a polyline in a 300x100 viewBox, and writes the lowest
+// and highest value and the two ends of the x axis into the labels around
+// it. Only numbers reach innerHTML.
+function drawLineChart(svg, data, withDots, [xStart, xEnd]) {
     const width = 300;
     const height = 100;
     const pad = 6;
@@ -938,7 +935,12 @@ function drawLineChart(svg, data, withDots) {
         ? data.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3" />`).join('')
         : '';
     svg.innerHTML = `<polyline points="${points}" />${circles}`;
-    return { min, max };
+
+    const plot = svg.parentElement;
+    plot.querySelector('.chart-y-max').textContent = max;
+    plot.querySelector('.chart-y-min').textContent = min === max ? '' : min;
+    plot.querySelector('.chart-x-start').textContent = xStart;
+    plot.querySelector('.chart-x-end').textContent = xEnd;
 }
 
 // WPM at the end of each whole second, from the recorded input events.
@@ -963,8 +965,7 @@ function renderRunChart() {
     const data = wpmBySecond();
     runChartContainer.classList.toggle('hidden', data.length < 2);
     if (data.length < 2) return;
-    const { max } = drawLineChart(runChart, data, false);
-    runChartCaption.textContent = `WPM by second, all typed characters. Peak ${max} WPM.`;
+    drawLineChart(runChart, data, false, ['1s', `${data.length}s`]);
 }
 
 // The run whose passages the next run replays: an open challenge, or with
@@ -1094,10 +1095,11 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
     const elapsed = elapsedMs();
     const raw = elapsed >= 1000 ? Math.round(runtime.typedChars / 5 / (elapsed / 60000)) : 0;
     const wrong = runtime.typedChars - runtime.correctChars;
+    resultTitle.textContent = settingsLabel(' · ');
     modalWpmElement.textContent = wpm;
     modalAccuracyElement.textContent = `${accuracy}%`;
     modalRawElement.textContent = raw;
-    modalCharsElement.textContent = `${runtime.correctChars} correct, ${wrong} wrong`;
+    modalCharsElement.textContent = `${runtime.correctChars} / ${wrong}`;
     modalTimeElement.textContent = `${(elapsed / 1000).toFixed(1)}s`;
     if (isNewBest) {
         modalBestElement.textContent = previousBest
@@ -1150,11 +1152,11 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
 // --- Sharing ---
 const SITE_URL = 'https://tmhsdigital.github.io/Typing-Game/';
 
-function settingsLabel() {
+function settingsLabel(separator = ' ') {
     const length =
         gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} words`;
     const category = categorySelect.selectedOptions[0]?.textContent || gameState.category;
-    return `${length} ${category}`;
+    return `${length}${separator}${category}`;
 }
 
 function shareText() {
@@ -1181,7 +1183,7 @@ async function shareResult() {
         shareBtn.textContent = 'Copy failed';
     }
     setTimeout(() => {
-        shareBtn.textContent = 'Share Result';
+        shareBtn.textContent = 'Share result';
     }, 2000);
 }
 

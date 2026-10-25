@@ -396,13 +396,23 @@ test.describe('settings dialog', () => {
         expect(history[0].mode).toBe('words');
         expect(history[0].key).toBe('words:10w:common');
 
-        // A second run makes the chart appear.
+        // The chart appears from the third run, with its scale.
         await page.keyboard.press('Enter');
         await expect(input(page)).toBeFocused();
         await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#progress-chart-container')).toBeHidden();
+        await page.keyboard.press('Enter');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
         await expect(page.locator('#progress-chart-container')).toBeVisible();
-        await expect(page.locator('#chart-caption')).toHaveText(/^Last 2 runs/);
-        await expect(page.locator('#progress-chart circle')).toHaveCount(2);
+        await expect(page.locator('#progress-chart-title')).toHaveText('WPM, last 3 runs');
+        await expect(page.locator('#progress-chart circle')).toHaveCount(3);
+        const progress = page.locator('#progress-chart-container');
+        await expect(progress.locator('.chart-x-start')).toHaveText('oldest');
+        await expect(progress.locator('.chart-x-end')).toHaveText('latest');
+        const runs = await page.evaluate(() =>
+            JSON.parse(localStorage.getItem('typingGameHistory')).map((run) => run.wpm)
+        );
+        await expect(progress.locator('.chart-y-max')).toHaveText(String(Math.max(...runs)));
 
         // Settings survive a reload.
         await page.reload();
@@ -537,7 +547,7 @@ test('share copies a summary to the clipboard', async ({ page }) => {
     expect(clipboard).toMatch(
         /^\d+ WPM, \d+% accuracy, 10 words Common Words on TypeSpeed https:\/\/tmhsdigital\.github\.io\/Typing-Game\/$/
     );
-    await expect(page.locator('#share-btn')).toHaveText('Share Result', { timeout: 3000 });
+    await expect(page.locator('#share-btn')).toHaveText('Share result', { timeout: 3000 });
 });
 
 test('restarting during a ghost replay cancels the pending moves', async ({ page }) => {
@@ -1265,13 +1275,21 @@ test('the result dialog shows raw WPM, characters, time, the run chart, and a ne
 
     const n = quote.length;
     await expect(page.locator('#modal-time')).toHaveText('30.0s');
-    await expect(page.locator('#modal-chars')).toHaveText(`${n - 1} correct, 1 wrong`);
+    await expect(page.locator('#modal-chars')).toHaveText(`${n - 1} / 1`);
     await expect(page.locator('#modal-raw')).toHaveText(String(Math.round(n / 5 / 0.5)));
     await expect(page.locator('#modal-wpm')).toHaveText(String(Math.round((n - 1) / 5 / 0.5)));
     await expect(page.locator('#modal-best')).toHaveText(
         'New best for these settings. Previous best: 1 WPM.'
     );
+    await expect(page.locator('#result-title')).toHaveText('10 words · Common Words');
     await expect(page.locator('#run-chart-container')).toBeVisible();
+    const runChart = page.locator('#run-chart-container');
+    await expect(runChart.locator('.chart-x-start')).toHaveText('1s');
+    await expect(runChart.locator('.chart-x-end')).toHaveText('30s');
+    await expect(runChart.locator('.chart-y-max')).toHaveText(/^\d+$/);
+    // Play again is the only primary button.
+    await expect(page.locator('#result-modal .action-btn.primary')).toHaveCount(1);
+    await expect(page.locator('#play-again-btn')).toBeFocused();
     const segments = await page
         .locator('#run-chart polyline')
         .evaluate((line) => line.getAttribute('points').split(' ').length);
