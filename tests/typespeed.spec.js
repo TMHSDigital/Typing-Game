@@ -4,7 +4,7 @@
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
-   currentBest, validBests, currentStreak, runHistory */
+   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -1146,6 +1146,15 @@ test.describe('text', () => {
         expect(texts).toMatch(/^[a-z' ]+$/);
     });
 
+    test('every code language has at least 25 snippets', async ({ page }) => {
+        await page.goto('/');
+        const counts = await page.evaluate(() =>
+            Object.values(CODE_SNIPPETS).map((list) => list.length)
+        );
+        expect(counts).toHaveLength(6);
+        for (const count of counts) expect(count).toBeGreaterThanOrEqual(25);
+    });
+
     test('every quote category has at least 50 passages', async ({ page }) => {
         await page.goto('/');
         const counts = await page.evaluate(() =>
@@ -1333,6 +1342,35 @@ test('the result dialog is positioned against the viewport, not the page card', 
 });
 
 test.describe('weak keys', () => {
+    test('weak symbols are practiced on common words', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'weak', mode: 'words', wordCount: 50 })
+            );
+            localStorage.setItem(
+                'typingGameKeyStats',
+                JSON.stringify({
+                    '{': { attempts: 10, misses: 6 },
+                    ';': { attempts: 10, misses: 5 },
+                    e: { attempts: 40, misses: 4 },
+                    ' ': { attempts: 90, misses: 80 },
+                    '\n': { attempts: 9, misses: 9 },
+                })
+            );
+        });
+        await page.goto('/');
+        expect(await page.evaluate(() => runtime.weakKeys)).toEqual(['{', ';', 'e']);
+        await expect(page.locator('#practice-note')).toHaveText('Practicing: {, ;, e');
+        const quote = await currentQuote(page);
+        expect(quote.split(' ')).toHaveLength(50);
+        expect(quote).toMatch(/\{[a-z]+\}/);
+        expect(quote).toMatch(/[a-z];/);
+        // The same seed gives the same passage, so Ghost Mode can replay it.
+        const again = await page.evaluate(() => firstPassageHash(runtime.seed, runtime.weakKeys));
+        expect(again).toBe(await page.evaluate(() => textHash(runtime.quoteText)));
+    });
+
     test('counts misses per expected key and shows the most missed after a run', async ({
         page,
     }) => {
@@ -1366,7 +1404,7 @@ test.describe('weak keys', () => {
         expect(saved).toEqual(stat);
     });
 
-    test('Practice weak keys starts a run of words containing the weakest letters', async ({
+    test('Practice weak keys starts a run of words containing the weakest keys', async ({
         page,
     }) => {
         await page.addInitScript(() => {
@@ -1378,7 +1416,7 @@ test.describe('weak keys', () => {
                     v: { attempts: 10, misses: 4 },
                     e: { attempts: 100, misses: 1 },
                     q: { attempts: 2, misses: 2 }, // too few attempts; no common word has q
-                    ';': { attempts: 10, misses: 9 }, // not a letter
+                    ' ': { attempts: 10, misses: 9 }, // space is not practiced
                 })
             );
         });

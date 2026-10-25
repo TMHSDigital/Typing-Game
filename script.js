@@ -279,18 +279,20 @@ if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
 let keyStats = loadJSON(STORAGE_KEYS.keyStats, {});
 if (!keyStats || typeof keyStats !== 'object' || Array.isArray(keyStats)) keyStats = {};
 
-// Letters missed most often, by miss rate, among letters tried at least
-// WEAK_MIN_ATTEMPTS times. Used by the Weak Keys category.
+// Keys missed most often, by miss rate, among keys tried at least
+// WEAK_MIN_ATTEMPTS times: letters (lowercased), digits, and symbols, but not
+// space or new line. Used by the Weak Keys category.
 const WEAK_MIN_ATTEMPTS = 5;
 const WEAK_KEY_COUNT = 3;
+const isWeakKeyCandidate = (key) => /^[!-~]$/.test(key); // printable ASCII, no space
 
 function weakestKeys() {
-    return Object.entries(keyStats)
-        .filter(([key, stat]) => /^[a-z]$/i.test(key) && stat && stat.misses > 0)
+    const keys = Object.entries(keyStats)
+        .filter(([key, stat]) => isWeakKeyCandidate(key) && stat && stat.misses > 0)
         .filter(([, stat]) => stat.attempts >= WEAK_MIN_ATTEMPTS)
         .sort(([, a], [, b]) => b.misses / b.attempts - a.misses / a.attempts)
-        .slice(0, WEAK_KEY_COUNT)
         .map(([key]) => key.toLowerCase());
+    return [...new Set(keys)].slice(0, WEAK_KEY_COUNT);
 }
 
 // Custom Text with no text saved uses common words, and is recorded as them.
@@ -499,12 +501,35 @@ function wordsWithKeys(keys) {
     return matching.length >= 10 ? matching : COMMON_WORDS;
 }
 
+// Weak digits and symbols are practiced on common words: about every other
+// word gets one, wrapped around the word for brackets and quotes, as a
+// two-digit number for digits, and after the word otherwise.
+const SYMBOL_PAIRS = { '(': ')', '[': ']', '{': '}', '<': '>', '"': '"', "'": "'", '`': '`' };
+
+function withSymbols(text, symbols) {
+    const closers = Object.fromEntries(Object.entries(SYMBOL_PAIRS).map(([a, b]) => [b, a]));
+    return text
+        .split(' ')
+        .map((word) => {
+            if (runtime.random() >= 0.5) return word;
+            const symbol = symbols[Math.floor(runtime.random() * symbols.length)];
+            if (/\d/.test(symbol)) return `${symbol}${Math.floor(runtime.random() * 10)}`;
+            const open = SYMBOL_PAIRS[symbol] ? symbol : closers[symbol];
+            if (open) return `${open}${word}${SYMBOL_PAIRS[open]}`;
+            return `${word}${symbol}`;
+        })
+        .join(' ');
+}
+
 // Returns { text, source } for the next passage.
 function getPassage() {
     if (gameState.category === 'weak') {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
         const plain = { punctuation: false, numbers: false };
-        return { text: commonWords(count, wordsWithKeys(runtime.weakKeys), plain), source: '' };
+        const letters = runtime.weakKeys.filter((key) => /^[a-z]$/.test(key));
+        const symbols = runtime.weakKeys.filter((key) => !/^[a-z]$/.test(key));
+        const text = commonWords(count, wordsWithKeys(letters), plain);
+        return { text: symbols.length ? withSymbols(text, symbols) : text, source: '' };
     }
     if (gameState.category === 'code') {
         const snippets = CODE_SNIPPETS[gameState.codeLanguage];
@@ -1352,7 +1377,7 @@ function parseChallenge(data) {
     const settings = {};
     for (const name of CHALLENGE_SETTINGS) settings[name] = sanitized[name];
     const weakKeys = Array.isArray(data.k)
-        ? data.k.filter((key) => /^[a-z]$/.test(key)).slice(0, WEAK_KEY_COUNT)
+        ? data.k.filter(isWeakKeyCandidate).slice(0, WEAK_KEY_COUNT)
         : [];
     const challenge = {
         settings,
@@ -1810,7 +1835,7 @@ function validBests(map) {
         if (Number.isInteger(best.seed)) result[key].seed = best.seed;
         if (isTextHash(best.textHash)) result[key].textHash = best.textHash;
         if (Array.isArray(best.weakKeys)) {
-            result[key].weakKeys = best.weakKeys.filter((k) => /^[a-z]$/.test(k)).slice(0, 3);
+            result[key].weakKeys = best.weakKeys.filter(isWeakKeyCandidate).slice(0, 3);
         }
     }
     return result;
