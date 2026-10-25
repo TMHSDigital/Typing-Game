@@ -152,6 +152,7 @@
                             <option value="rust">Rust</option>
                             <option value="sql">SQL</option>
                             <option value="shell">Shell</option>
+                            <option value="own">Your code</option>
                         </select>
                         <label class="option-check" id="punctuation-option">
                             <input type="checkbox" id="punctuation-toggle" />
@@ -175,6 +176,9 @@
                             aria-haspopup="dialog"
                         >
                             Edit text
+                        </button>
+                        <button id="edit-code-btn" class="option-btn hidden" aria-haspopup="dialog">
+                            Edit code
                         </button>
                         <p id="practice-note" class="practice-note hidden"></p>
                     </div>
@@ -670,6 +674,49 @@
                 </div>
                 <div class="modal-actions settings-footer">
                     <button id="close-custom-btn" class="action-btn primary">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Your code, for the Code Snippets category -->
+        <div
+            id="code-modal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="code-title"
+        >
+            <div class="modal-content settings-content">
+                <h2 id="code-title">Your code</h2>
+                <div class="settings-body">
+                    <label class="setting-name" for="own-code">Code to type</label>
+                    <textarea
+                        id="own-code"
+                        class="custom-text"
+                        rows="12"
+                        wrap="off"
+                        spellcheck="false"
+                        aria-describedby="own-code-help"
+                    ></textarea>
+                    <p class="code-file-row">
+                        <button id="code-file-btn" class="option-btn">Load a file</button>
+                        <input
+                            type="file"
+                            id="code-file"
+                            hidden
+                            accept=".js,.mjs,.ts,.jsx,.tsx,.py,.go,.rs,.sql,.sh,.rb,.java,.c,.h,.cpp,.cs,.php,.swift,.kt,.css,.html,.txt,text/*"
+                        />
+                        <span id="code-file-status" aria-live="polite"></span>
+                    </p>
+                    <p id="own-code-help" class="setting-help">
+                        Paste code or load a file; it stays in this browser. Tabs become four
+                        spaces, trailing spaces and repeated blank lines are removed, lines over 100
+                        characters are dropped, and code past 20,000 characters is cut at a line.
+                        Each run picks a block of up to 15 lines between blank lines.
+                    </p>
+                </div>
+                <div class="modal-actions settings-footer">
+                    <button id="close-code-btn" class="action-btn primary">Done</button>
                 </div>
             </div>
         </div>

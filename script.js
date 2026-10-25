@@ -60,6 +60,13 @@ const closeSettingsBtn = document.getElementById('close-settings-btn');
 // Custom text dialog
 const customModal = document.getElementById('custom-modal');
 const editCustomBtn = document.getElementById('edit-custom-btn');
+const codeModal = document.getElementById('code-modal');
+const editCodeBtn = document.getElementById('edit-code-btn');
+const ownCodeInput = document.getElementById('own-code');
+const codeFileBtn = document.getElementById('code-file-btn');
+const codeFileInput = document.getElementById('code-file');
+const codeFileStatus = document.getElementById('code-file-status');
+const closeCodeBtn = document.getElementById('close-code-btn');
 const closeCustomBtn = document.getElementById('close-custom-btn');
 
 // Stats dialog
@@ -194,7 +201,8 @@ const DEFAULT_SETTINGS = {
     hasNumbers: false, // common words only
     isStopOnError: false, // wrong keys do not advance the caret
     customText: '', // passage for the Custom Text category, already normalized
-    codeLanguage: 'javascript', // key of CODE_SNIPPETS (texts.js)
+    codeLanguage: 'javascript', // key of CODE_SNIPPETS (texts.js), or OWN_CODE
+    ownCode: '', // code for the "Your code" language, already normalized
     isAutoIndent: true, // fill in leading spaces after a new line in code
     theme: 'system', // 'system', 'dark', 'light', or 'contrast'
     passageFont: 'mono', // values of these four in PASSAGE_STYLES
@@ -246,7 +254,62 @@ function textHash(text) {
 }
 
 const CATEGORIES = ['common', 'weak', 'custom', 'code', ...Object.keys(QUOTES)];
-const CODE_LANGUAGES = Object.keys(CODE_SNIPPETS);
+const OWN_CODE = 'own';
+const CODE_LANGUAGES = [...Object.keys(CODE_SNIPPETS), OWN_CODE];
+const OWN_CODE_LIMIT = 20000; // characters
+const OWN_CODE_LINE_MAX = 100;
+const OWN_CODE_CHUNK_LINES = 15;
+
+// Code keeps its line breaks and indentation, unlike custom text.
+function normalizeOwnCode(text) {
+    const lines = String(text)
+        .replace(/\r\n?/g, '\n')
+        .replace(/\t/g, '    ')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/[\u2013\u2014]/g, '-')
+        .split('\n')
+        .map((line) => line.replace(/\s+$/, ''))
+        .filter((line) => line.length <= OWN_CODE_LINE_MAX);
+    let code = lines
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/^\n+|\n+$/g, '');
+    if (code.length > OWN_CODE_LIMIT) {
+        code = code.slice(0, OWN_CODE_LIMIT);
+        code = code.slice(0, code.lastIndexOf('\n')).replace(/\n+$/, '');
+    }
+    return code;
+}
+
+// Blocks between blank lines, cut to OWN_CODE_CHUNK_LINES lines, each moved
+// left so its least indented line starts at the margin.
+function ownCodeChunks(code) {
+    const chunks = [];
+    for (const block of code.split(/\n\n+/)) {
+        const lines = block.split('\n');
+        for (let n = 0; n < lines.length; n += OWN_CODE_CHUNK_LINES) {
+            const chunk = lines.slice(n, n + OWN_CODE_CHUNK_LINES);
+            const indent = Math.min(...chunk.map((line) => line.match(/^ */)[0].length));
+            chunks.push(chunk.map((line) => line.slice(indent)));
+        }
+    }
+    return chunks;
+}
+
+// The language whose snippets a Code run uses: "Your code" with nothing
+// saved uses JavaScript.
+const codeLanguage = () =>
+    gameState.codeLanguage === OWN_CODE && !gameState.ownCode
+        ? 'javascript'
+        : gameState.codeLanguage;
+
+const codeSnippets = () =>
+    codeLanguage() === OWN_CODE ? ownCodeChunks(gameState.ownCode) : CODE_SNIPPETS[codeLanguage()];
+
+// Custom text and your own code stay on this device: no challenge links.
+const isLocalText = () =>
+    passageCategory() === 'custom' || (passageCategory() === 'code' && codeLanguage() === OWN_CODE);
 
 function sanitizeSettings(saved) {
     const settings = { ...DEFAULT_SETTINGS };
@@ -271,6 +334,7 @@ function sanitizeSettings(saved) {
     if (Number.isInteger(saved.paceWpm) && saved.paceWpm >= PACE_MIN && saved.paceWpm <= PACE_MAX) {
         settings.paceWpm = saved.paceWpm;
     }
+    if (typeof saved.ownCode === 'string') settings.ownCode = normalizeOwnCode(saved.ownCode);
     if (typeof saved.customText === 'string') {
         settings.customText = normalizeCustomText(saved.customText);
     }
@@ -373,7 +437,11 @@ function settingsKey() {
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
     let category = passageCategory();
     if (category === 'custom') category = `custom-${textHash(gameState.customText)}`;
-    if (category === 'code') category = `code-${gameState.codeLanguage}`;
+    if (category === 'code') {
+        const language = codeLanguage();
+        category =
+            language === OWN_CODE ? `code-own-${textHash(gameState.ownCode)}` : `code-${language}`;
+    }
     if (category === 'common') {
         if (gameState.hasPunctuation) category += '+punctuation';
         if (gameState.hasNumbers) category += '+numbers';
@@ -700,7 +768,7 @@ function getPassage() {
         return { text: symbols.length ? withSymbols(text, symbols) : text, source: '' };
     }
     if (gameState.category === 'code') {
-        const snippets = CODE_SNIPPETS[gameState.codeLanguage];
+        const snippets = codeSnippets();
         if (gameState.mode !== 'words') return { text: pickQuote(snippets).join('\n'), source: '' };
         // Words mode uses whole snippets until there are at least that many words.
         const parts = [];
@@ -825,7 +893,7 @@ function renderNewQuote() {
 
 // --- Core Logic ---
 function handleInput() {
-    if (isModalOpen(settingsModal) || isModalOpen(customModal)) return;
+    if (isModalOpen(settingsModal) || isModalOpen(customModal) || isModalOpen(codeModal)) return;
     if (!runtime.isStarted) startGame();
 
     // The interval checks the clock only every 250 ms. Input that arrives
@@ -1373,6 +1441,7 @@ function resetGame() {
     settingsModal.classList.remove('show');
     statsModal.classList.remove('show');
     customModal.classList.remove('show');
+    codeModal.classList.remove('show');
     replayModal.classList.remove('show');
 
     updateQuickBar();
@@ -1397,12 +1466,24 @@ function updateQuickBar() {
     punctuationOption.classList.toggle('hidden', gameState.category !== 'common');
     numbersOption.classList.toggle('hidden', gameState.category !== 'common');
     editCustomBtn.classList.toggle('hidden', gameState.category !== 'custom');
+    editCodeBtn.classList.toggle(
+        'hidden',
+        gameState.category !== 'code' || gameState.codeLanguage !== OWN_CODE
+    );
     dailyBtn.setAttribute('aria-pressed', String(Boolean(runtime.challenge?.daily)));
 
     const weak = runtime.weakKeys;
     const noCustomText = gameState.category === 'custom' && !gameState.customText;
-    practiceNote.classList.toggle('hidden', gameState.category !== 'weak' && !noCustomText);
-    if (noCustomText) {
+    const noOwnCode =
+        gameState.category === 'code' && gameState.codeLanguage === OWN_CODE && !gameState.ownCode;
+    practiceNote.classList.toggle(
+        'hidden',
+        gameState.category !== 'weak' && !noCustomText && !noOwnCode
+    );
+    if (noOwnCode) {
+        practiceNote.textContent =
+            'No code yet. Add it with Edit code; using JavaScript snippets until then.';
+    } else if (noCustomText) {
         practiceNote.textContent =
             'No custom text yet. Add it with Edit text; using common words until then.';
     } else if (!weak.length) {
@@ -1470,7 +1551,7 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
     practiceBtn.classList.toggle('hidden', weakestKeys().length === 0);
     replayBtn.classList.toggle('hidden', runtime.replay.events.length === 0);
     // A custom text stays on this device, so it cannot be sent as a challenge.
-    const canChallenge = elapsed >= 1000 && passageCategory() !== 'custom';
+    const canChallenge = elapsed >= 1000 && !isLocalText();
     challengeBtn.classList.toggle('hidden', !canChallenge);
     challengeBtn.textContent = 'Copy challenge link';
     challengeLinkRow.classList.add('hidden');
@@ -1903,7 +1984,7 @@ function parseChallenge(data) {
     }
 
     const sanitized = sanitizeSettings(data.s);
-    if (sanitized.category === 'custom') return null;
+    if (sanitized.category === 'custom' || sanitized.codeLanguage === OWN_CODE) return null;
     const settings = {};
     for (const name of CHALLENGE_SETTINGS) settings[name] = sanitized[name];
     const weakKeys = Array.isArray(data.k)
@@ -2176,6 +2257,38 @@ function openCustomText() {
     focusInDialog(customTextInput);
 }
 
+// Like custom text, editing your code abandons a run in progress.
+function openOwnCode() {
+    if (runtime.isStarted) resetGame();
+    typingInputElement.blur();
+    ownCodeInput.value = gameState.ownCode;
+    codeFileStatus.textContent = '';
+    codeModal.classList.add('show');
+    updateFocusHint();
+    focusInDialog(ownCodeInput);
+}
+
+function closeOwnCode() {
+    codeModal.classList.remove('show');
+    gameState.ownCode = normalizeOwnCode(ownCodeInput.value);
+    saveSettings();
+    resetGame();
+}
+
+// The file is read in the browser and never uploaded.
+async function loadCodeFile(file) {
+    if (file.size > 1000000) {
+        codeFileStatus.textContent = 'That file is over 1 MB.';
+        return;
+    }
+    try {
+        ownCodeInput.value = normalizeOwnCode(await file.text());
+        codeFileStatus.textContent = `Loaded ${file.name}.`;
+    } catch {
+        codeFileStatus.textContent = 'Could not read that file.';
+    }
+}
+
 function closeCustomText() {
     customModal.classList.remove('show');
     gameState.customText = normalizeCustomText(customTextInput.value);
@@ -2244,7 +2357,7 @@ function describeKey(key) {
     const option = categorySelect.querySelector(`option[value="${CSS.escape(value)}"]`);
     const lengthLabel = mode === 'words' ? `${parseInt(length, 10)} words` : length;
     let label = option ? option.textContent : base;
-    const language = value === 'code' && base.slice(5);
+    const language = value === 'code' && base.slice(5).replace(/-.*$/, '');
     const languageOption =
         language && codeLanguageSelect.querySelector(`option[value="${CSS.escape(language)}"]`);
     if (languageOption) label += ` (${languageOption.textContent})`;
@@ -2610,7 +2723,9 @@ function isModalOpen(modal) {
 
 function openModal() {
     return (
-        [settingsModal, customModal, statsModal, resultModal, replayModal].find(isModalOpen) || null
+        [settingsModal, customModal, codeModal, statsModal, resultModal, replayModal].find(
+            isModalOpen
+        ) || null
     );
 }
 
@@ -2657,6 +2772,7 @@ function handleKeydown(e) {
     if (e.key === 'Escape') {
         if (modal === settingsModal) closeSettings();
         else if (modal === customModal) closeCustomText();
+        else if (modal === codeModal) closeOwnCode();
         else if (modal === statsModal) closeStats();
         else if (modal === resultModal) resetGame();
         else if (modal === replayModal) closeReplay();
@@ -2710,6 +2826,14 @@ function init() {
     clearBtn.addEventListener('click', clearData);
     closeSettingsBtn.addEventListener('click', closeSettings);
     editCustomBtn.addEventListener('click', openCustomText);
+    editCodeBtn.addEventListener('click', openOwnCode);
+    closeCodeBtn.addEventListener('click', closeOwnCode);
+    codeFileBtn.addEventListener('click', () => codeFileInput.click());
+    // Cleared after reading, so picking the same file again still fires change.
+    codeFileInput.addEventListener('change', async () => {
+        if (codeFileInput.files[0]) await loadCodeFile(codeFileInput.files[0]);
+        codeFileInput.value = '';
+    });
     closeCustomBtn.addEventListener('click', closeCustomText);
     themeSelector.addEventListener('click', handleThemeClick);
     prefersLight.addEventListener('change', applyTheme);

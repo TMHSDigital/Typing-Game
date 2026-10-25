@@ -2614,6 +2614,126 @@ test.describe('code snippets', () => {
         }
     };
 
+    // Tabs, Windows line ends, trailing spaces, a run of blank lines, and a
+    // line over 100 characters, which is dropped.
+    const OWN_SOURCE =
+        'function add(a, b) {\r\n\treturn a + b;   \r\n}\r\n\r\n\r\n\r\n' +
+        `// ${'x'.repeat(120)}\r\n` +
+        'class Box {\r\n\tconstructor(v) {\r\n\t\tthis.v = v;\r\n\t}\r\n}\r\n';
+    const OWN_NORMALIZED =
+        'function add(a, b) {\n    return a + b;\n}\n\n' +
+        'class Box {\n    constructor(v) {\n        this.v = v;\n    }\n}';
+    const loadOwnCode = async (page) => {
+        await page.locator('#code-language-select').selectOption('own');
+        await expect(page.locator('#practice-note')).toHaveText(
+            'No code yet. Add it with Edit code; using JavaScript snippets until then.'
+        );
+        await page.locator('#edit-code-btn').click();
+        await expect(page.locator('#own-code')).toBeFocused();
+        await page.locator('#code-file').setInputFiles({
+            name: 'example.js',
+            mimeType: 'text/javascript',
+            buffer: Buffer.from(OWN_SOURCE),
+        });
+        await expect(page.locator('#code-file-status')).toHaveText('Loaded example.js.');
+        await page.locator('#close-code-btn').click();
+    };
+
+    test('your own code file is typed with Enter and filled-in indentation', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ category: 'code' }));
+        });
+        await page.goto('/');
+        await loadOwnCode(page);
+        expect(await page.evaluate(() => gameState.ownCode)).toBe(OWN_NORMALIZED);
+        await expect(page.locator('#practice-note')).toBeHidden();
+        const key = await page.evaluate(() => settingsKey());
+        expect(key).toMatch(/^time:60s:code-own-[0-9a-z]+$/);
+
+        const quote = await currentQuote(page);
+        expect(OWN_NORMALIZED.split('\n\n')).toContain(quote);
+        await typeCode(page, quote, { skipIndent: true });
+        const counted = quote.replace(/\n +/g, '\n').length;
+        expect(
+            await page.evaluate(() => [
+                runtime.quoteBase,
+                runtime.keystrokes,
+                runtime.mistakes,
+                runtime.correctChars,
+            ])
+        ).toEqual([quote.length, counted, 0, counted]);
+    });
+
+    test('your own code survives a reload and an export and import', async ({ page, browser }) => {
+        await page.addInitScript(() => {
+            if (!localStorage.getItem('typingGameSettings')) {
+                localStorage.setItem('typingGameSettings', JSON.stringify({ category: 'code' }));
+            }
+        });
+        await page.goto('/');
+        await loadOwnCode(page);
+        const key = await page.evaluate(() => settingsKey());
+        await page.reload();
+        await expect(page.locator('#edit-code-btn')).toBeVisible();
+        expect(await page.evaluate(() => [gameState.ownCode, settingsKey()])).toEqual([
+            OWN_NORMALIZED,
+            key,
+        ]);
+
+        await page.locator('#stats-btn').click();
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#export-btn').click(),
+        ]);
+        const saved = test.info().outputPath('export.json');
+        await download.saveAs(saved);
+
+        const fresh = await browser.newContext();
+        const other = await fresh.newPage();
+        await other.goto('/');
+        await other.locator('#stats-btn').click();
+        await other.locator('#import-input').setInputFiles({
+            name: 'export.json',
+            mimeType: 'application/json',
+            buffer: fs.readFileSync(saved),
+        });
+        await expect(other.locator('#stats-status')).toContainText('Imported');
+        expect(await other.evaluate(() => [gameState.ownCode, settingsKey()])).toEqual([
+            OWN_NORMALIZED,
+            key,
+        ]);
+        await fresh.close();
+    });
+
+    test('your own code is not sent in challenge links', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({
+                    mode: 'words',
+                    category: 'code',
+                    codeLanguage: 'own',
+                    ownCode: 'let a = 1;',
+                })
+            );
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 60 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        await expect(page.locator('#challenge-btn')).toBeHidden();
+        const parsed = await page.evaluate(() =>
+            parseChallenge({
+                v: 2,
+                s: { category: 'code', codeLanguage: 'own' },
+                h: 'abc',
+                seed: 1,
+                wpm: 50,
+                d: [],
+            })
+        );
+        expect(parsed).toBeNull();
+    });
+
     test('a language menu appears and each language keeps its own best', async ({ page }) => {
         await page.goto('/');
         await expect(page.locator('#code-language-select')).toBeHidden();
