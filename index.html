@@ -184,7 +184,7 @@
                             <button class="pill" data-value="25" aria-pressed="false">25</button>
                             <button class="pill" data-value="50" aria-pressed="false">50</button>
                         </div>
-                        <span class="badge hidden" id="ghost-badge">Ghost On</span>
+                        <span class="badge hidden" id="ghost-badge">Ghost on</span>
                     </div>
                 </div>
 
@@ -524,30 +524,32 @@
                 <h2 id="stats-title">Stats</h2>
                 <p id="stats-summary" class="stats-summary"></p>
 
-                <h3 class="stats-heading">Best per setting</h3>
-                <table class="stats-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Setting</th>
-                            <th scope="col">Best WPM</th>
-                        </tr>
-                    </thead>
-                    <tbody id="stats-bests"></tbody>
-                </table>
-
-                <h3 class="stats-heading">Recent runs</h3>
-                <div class="stats-scroll">
-                    <table class="stats-table">
+                <div id="stats-tables">
+                    <h3 class="stats-heading">Best per setting</h3>
+                    <table class="stats-table compact">
                         <thead>
                             <tr>
-                                <th scope="col">Date</th>
                                 <th scope="col">Setting</th>
-                                <th scope="col">WPM</th>
-                                <th scope="col">Accuracy</th>
+                                <th scope="col" class="num">Best WPM</th>
                             </tr>
                         </thead>
-                        <tbody id="stats-runs"></tbody>
+                        <tbody id="stats-bests"></tbody>
                     </table>
+
+                    <h3 class="stats-heading">Recent runs</h3>
+                    <div class="stats-scroll">
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Date</th>
+                                    <th scope="col">Setting</th>
+                                    <th scope="col" class="num">WPM</th>
+                                    <th scope="col" class="num">Accuracy</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-runs"></tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <p class="stats-note">
@@ -555,10 +557,10 @@
                 </p>
                 <p id="stats-status" class="stats-status" role="status"></p>
                 <input type="file" id="import-input" accept="application/json,.json" hidden />
-                <div class="modal-actions">
+                <div class="modal-actions stats-actions">
+                    <button id="clear-btn" class="action-btn danger">Clear data</button>
                     <button id="export-btn" class="action-btn secondary">Export</button>
                     <button id="import-btn" class="action-btn secondary">Import</button>
-                    <button id="clear-btn" class="action-btn secondary">Clear data</button>
                     <button id="close-stats-btn" class="action-btn primary">Done</button>
                 </div>
             </div>

@@ -1492,9 +1492,9 @@ test.describe('stats dialog', () => {
             '25 words, Code Snippets'
         );
 
-        // Done is last, so Tab wraps to Export.
+        // Done is last, so Tab wraps to the first action, Clear data.
         await page.keyboard.press('Tab');
-        await expect(page.locator('#export-btn')).toBeFocused();
+        await expect(page.locator('#clear-btn')).toBeFocused();
         await page.keyboard.press('Shift+Tab');
         await expect(page.locator('#close-stats-btn')).toBeFocused();
 
@@ -1591,7 +1591,10 @@ test.describe('stats dialog', () => {
         expect(await page.evaluate(() => localStorage.getItem('typingGameBests'))).not.toBeNull();
 
         await page.locator('#clear-btn').click();
-        await expect(page.locator('#stats-summary')).toHaveText('No recorded runs yet.');
+        await expect(page.locator('#stats-summary')).toHaveText(
+            'No runs yet. Finish a run of a second or longer to see it here.'
+        );
+        await expect(page.locator('#stats-tables')).toBeHidden();
         const stored = await page.evaluate(() =>
             ['typingGameHistory', 'typingGameBests', 'typingGameKeyStats'].map((key) =>
                 localStorage.getItem(key)
@@ -1771,7 +1774,7 @@ test.describe('challenge links', () => {
         );
         expect(await other.evaluate(() => localStorage.getItem('typingGameSettings'))).toBeNull();
 
-        // Play Again returns to the receiver's own settings and drops the hash.
+        // Play again returns to the receiver's own settings and drops the hash.
         await other.locator('#play-again-btn').click();
         await expect(other.locator('#quick-mode .pill.active')).toHaveText('Time');
         await expect(other.locator('#category-select')).toHaveValue('common');

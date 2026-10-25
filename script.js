@@ -52,6 +52,7 @@ const closeCustomBtn = document.getElementById('close-custom-btn');
 const statsModal = document.getElementById('stats-modal');
 const statsBtn = document.getElementById('stats-btn');
 const statsSummary = document.getElementById('stats-summary');
+const statsTables = document.getElementById('stats-tables');
 const statsBestsBody = document.getElementById('stats-bests');
 const statsRunsBody = document.getElementById('stats-runs');
 const statsStatus = document.getElementById('stats-status');
@@ -1344,7 +1345,7 @@ function prepareChallengeUrl() {
         .catch(() => {});
 }
 
-// Like Share Result: the share sheet on phones, the clipboard elsewhere. If
+// Like Share result: the share sheet on phones, the clipboard elsewhere. If
 // neither works, the link is shown so it can be copied by hand.
 async function copyChallengeLink() {
     let url = runtime.challengeUrl;
@@ -1556,7 +1557,9 @@ function renderStats() {
     const recent = runHistory.slice(0, 10);
     statsSummary.textContent = recent.length
         ? `${runHistory.length} recorded ${runHistory.length === 1 ? 'run' : 'runs'}. Average of the last ${recent.length}: ${Math.round(recent.reduce((sum, run) => sum + run.wpm, 0) / recent.length)} WPM.`
-        : 'No recorded runs yet.';
+        : 'No runs yet. Finish a run of a second or longer to see it here.';
+    // Empty tables with headers say nothing the line above does not.
+    statsTables.classList.toggle('hidden', recent.length === 0 && !Object.keys(bests).length);
 
     statsBestsBody.textContent = '';
     Object.entries(bests)

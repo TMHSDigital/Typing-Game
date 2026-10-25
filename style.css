@@ -945,9 +945,8 @@ footer {
 
 .stats-heading {
     font-size: 0.85rem;
+    font-weight: 600;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
     margin: 1rem 0 0.5rem;
 }
 
@@ -960,6 +959,12 @@ footer {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Sized to its content, so each best sits next to its setting */
+.stats-table.compact {
+    width: auto;
 }
 
 .stats-table th {
@@ -976,8 +981,27 @@ footer {
     border-bottom: 1px solid var(--glass-border);
 }
 
-.stats-table td.num {
-    font-family: var(--font-code);
+.stats-table .num {
+    text-align: right;
+}
+
+/* Clear data on the left, apart from the actions that keep data */
+.stats-actions {
+    justify-content: flex-end;
+}
+
+.stats-actions .danger {
+    margin-right: auto;
+}
+
+.action-btn.danger {
+    background: transparent;
+    color: var(--color-error);
+    padding: 0.75rem 0.5rem;
+}
+
+.action-btn.danger:hover {
+    text-decoration: underline;
 }
 
 .stats-note {
