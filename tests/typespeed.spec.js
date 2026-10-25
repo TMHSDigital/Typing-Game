@@ -286,10 +286,10 @@ test.describe('settings dialog', () => {
         const dialog = page.locator('#settings-modal');
         await expect(dialog).toHaveClass(/show/);
         await expect(dialog).toHaveAttribute('role', 'dialog');
-        await expect(page.locator('#mode-selector .pill.active')).toBeFocused();
+        await expect(page.locator('#stop-on-error-toggle')).toBeFocused();
 
         await page.keyboard.press('Tab');
-        await expect(page.locator('#mode-selector .pill[data-value="words"]')).toBeFocused();
+        await expect(page.locator('#hard-mode-toggle-settings')).toBeFocused();
 
         await page.keyboard.press('a');
         expect(await page.evaluate(() => [runtime.isStarted, typingInputElement.value])).toEqual([
@@ -306,6 +306,23 @@ test.describe('settings dialog', () => {
         await expect(dialog).not.toHaveClass(/show/);
         await expect(input(page)).toBeFocused();
     });
+
+    for (const [width, height] of [
+        [1440, 900],
+        [1280, 720],
+    ]) {
+        test(`fits without scrolling at ${width}x${height}`, async ({ page }) => {
+            await page.setViewportSize({ width, height });
+            await page.goto('/');
+            await page.locator('#settings-btn').click();
+            await expect(page.locator('#close-settings-btn')).toBeInViewport();
+            const overflow = await page.evaluate(() => {
+                const body = document.querySelector('#settings-modal .settings-body');
+                return body.scrollHeight - body.clientHeight;
+            });
+            expect(overflow).toBeLessThanOrEqual(0);
+        });
+    }
 
     test('opening it during a run abandons the run', async ({ page }) => {
         await page.clock.install();
@@ -334,14 +351,9 @@ test.describe('settings dialog', () => {
         page,
     }) => {
         await page.goto('/');
-        await page.locator('#settings-btn').click();
-        await page.keyboard.press('Tab');
+        await page.locator('#quick-mode [data-value="words"]').focus();
         await page.keyboard.press('Enter');
 
-        await expect(page.locator('#word-count-setting')).toBeVisible();
-        await expect(page.locator('#timer-setting')).toBeHidden();
-
-        await page.keyboard.press('Escape');
         await expect(page.locator('#quick-mode .pill.active')).toHaveText('Words');
         await expect(page.locator('#quick-word-count .pill.active')).toHaveText('10');
         await expect(page.locator('#timer')).toHaveText('0');
@@ -397,10 +409,7 @@ test.describe('best scores', () => {
         await page.goto('/');
         await expect(page.locator('#high-score')).toHaveText('40');
 
-        await page.locator('#settings-btn').click();
-        await page.keyboard.press('Tab');
-        await page.keyboard.press('Enter');
-        await page.keyboard.press('Escape');
+        await page.locator('#quick-mode [data-value="words"]').click();
         await expect(page.locator('#high-score')).toHaveText('70');
 
         await page.locator('#category-select').selectOption('code');
@@ -735,16 +744,25 @@ test.describe('accessibility', () => {
         return results.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ')));
     };
 
-    test('text meets WCAG AA contrast on the main screen and in both dialogs', async ({ page }) => {
+    test('text meets WCAG AA contrast on the main screen and in the dialogs', async ({ page }) => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await page.goto('/');
         expect(await contrastViolations(page)).toEqual([]);
 
         await page.locator('#settings-btn').click();
         expect(await contrastViolations(page)).toEqual([]);
-        await page.keyboard.press('Tab');
-        await page.keyboard.press('Enter');
         await page.keyboard.press('Escape');
+
+        await page.locator('#category-select').selectOption('custom');
+        await page.locator('#edit-custom-btn').click();
+        await expect(page.locator('#custom-modal')).toHaveClass(/show/);
+        expect(await contrastViolations(page)).toEqual([]);
+        await page.keyboard.press('Escape');
+
+        await page.locator('#category-select').selectOption('code');
+        expect(await contrastViolations(page)).toEqual([]);
+        await page.locator('#category-select').selectOption('common');
+        await page.locator('#quick-mode [data-value="words"]').click();
 
         await input(page).pressSequentially(await currentQuote(page));
         await expect(page.locator('#result-modal')).toHaveClass(/show/);
@@ -766,21 +784,19 @@ test.describe('accessibility', () => {
         await expect(page.locator('#quote-text')).toHaveText(await currentQuote(page));
         await page.keyboard.press('Tab');
 
-        await page.locator('#settings-btn').click();
-        await expect(page.locator('#mode-selector [data-value="time"]')).toHaveAttribute(
+        await expect(page.locator('#quick-mode [data-value="time"]')).toHaveAttribute(
             'aria-pressed',
             'true'
         );
-        await page.locator('#mode-selector [data-value="words"]').click();
-        await expect(page.locator('#mode-selector [data-value="time"]')).toHaveAttribute(
+        await page.locator('#quick-mode [data-value="words"]').click();
+        await expect(page.locator('#quick-mode [data-value="time"]')).toHaveAttribute(
             'aria-pressed',
             'false'
         );
-        await expect(page.locator('#mode-selector [data-value="words"]')).toHaveAttribute(
+        await expect(page.locator('#quick-mode [data-value="words"]')).toHaveAttribute(
             'aria-pressed',
             'true'
         );
-        await page.keyboard.press('Escape');
 
         await expect(page.locator('#result-modal')).toHaveAttribute(
             'aria-describedby',
@@ -954,9 +970,9 @@ test.describe('sound', () => {
 test('feature toggles are saved and applied after a reload', async ({ page }) => {
     await page.goto('/');
     await page.locator('#settings-btn').click();
-    await page.locator('label', { hasText: 'Sound Effects' }).click();
-    await page.locator('label', { hasText: 'Hard Mode' }).click();
-    await page.locator('label', { hasText: 'Ghost Mode' }).click();
+    await page.locator('label', { hasText: 'Sound effects' }).click();
+    await page.locator('label', { hasText: 'Hard mode' }).click();
+    await page.locator('label', { hasText: 'Ghost mode' }).click();
     await page.locator('#close-settings-btn').click();
 
     await page.reload();
@@ -1044,17 +1060,64 @@ test.describe('text', () => {
         expect(result.texts).toMatch(/\d/);
         expect(result.key).toBe('words:50w:common+punctuation+numbers');
 
-        // The toggles are in Settings and are saved.
+        // The toggles are next to the category select, save at once, and
+        // start a new passage.
         await page.evaluate(() => {
             gameState.hasPunctuation = false;
             gameState.hasNumbers = false;
         });
-        await page.locator('#settings-btn').click();
-        await page.locator('label', { hasText: 'Punctuation' }).click();
-        await page.locator('#close-settings-btn').click();
+        await page.locator('#punctuation-option').click();
+        await expect(page.locator('#punctuation-toggle')).toBeChecked();
+        await expect(input(page)).toBeFocused();
+        expect(await currentQuote(page)).toMatch(/^[A-Z].*[.?]/);
         expect(
             await page.evaluate(() => JSON.parse(localStorage.getItem('typingGameSettings')))
         ).toMatchObject({ hasPunctuation: true, hasNumbers: false });
+    });
+
+    test('category options are shown only for the category they apply to', async ({ page }) => {
+        await page.goto('/');
+        const visible = async () => {
+            const ids = [
+                '#punctuation-option',
+                '#numbers-option',
+                '#code-language-select',
+                '#auto-indent-option',
+                '#edit-custom-btn',
+            ];
+            const shown = [];
+            for (const id of ids) if (await page.locator(id).isVisible()) shown.push(id);
+            return shown;
+        };
+        expect(await visible()).toEqual(['#punctuation-option', '#numbers-option']);
+        await page.locator('#category-select').selectOption('code');
+        expect(await visible()).toEqual(['#code-language-select', '#auto-indent-option']);
+        await page.locator('#category-select').selectOption('custom');
+        expect(await visible()).toEqual(['#edit-custom-btn']);
+        for (const category of ['weak', 'general', 'technology']) {
+            await page.locator('#category-select').selectOption(category);
+            expect(await visible()).toEqual([]);
+        }
+    });
+
+    test('weak keys ignore the hidden punctuation and numbers options', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({
+                    mode: 'words',
+                    wordCount: 50,
+                    category: 'weak',
+                    hasPunctuation: true,
+                    hasNumbers: true,
+                })
+            );
+        });
+        await page.goto('/');
+        const texts = await page.evaluate(() =>
+            Array.from({ length: 5 }, () => getPassage().text).join(' ')
+        );
+        expect(texts).toMatch(/^[a-z' ]+$/);
     });
 
     test('every quote category has at least 50 passages', async ({ page }) => {
@@ -1153,11 +1216,6 @@ test('mode and length can be changed from the main screen', async ({ page }) => 
     expect(
         await page.evaluate(() => JSON.parse(localStorage.getItem('typingGameSettings')))
     ).toMatchObject({ mode: 'words', wordCount: 25 });
-
-    // The Settings dialog shows the same values.
-    await page.locator('#settings-btn').click();
-    await expect(page.locator('#word-count-selector .pill.active')).toHaveText('25');
-    await page.keyboard.press('Escape');
 
     // Keyboard works too.
     await page.locator('#quick-mode [data-value="time"]').focus();
@@ -1891,7 +1949,7 @@ test.describe('challenge links', () => {
 });
 
 test.describe('custom text', () => {
-    test('text pasted in Settings is normalized, typed, and kept after a reload', async ({
+    test('pasted text is normalized, typed, and kept after a reload', async ({
         page,
         context,
         browserName,
@@ -1899,10 +1957,11 @@ test.describe('custom text', () => {
         await page.goto('/');
         await page.locator('#category-select').selectOption('custom');
         await expect(page.locator('#practice-note')).toHaveText(
-            'No custom text yet. Add it in Settings; using common words until then.'
+            'No custom text yet. Add it with Edit text; using common words until then.'
         );
 
-        await page.locator('#settings-btn').click();
+        await page.locator('#edit-custom-btn').click();
+        await expect(page.locator('#custom-text')).toBeFocused();
         const raw = '\u201cIt\u2019s  fine\u201d \u2014 she said\u2026\n\nline two';
         if (browserName === 'chromium') {
             // A real paste works in this field, unlike in the typing input.
@@ -1923,7 +1982,7 @@ test.describe('custom text', () => {
 
         await page.reload();
         expect(await currentQuote(page)).toBe(expected);
-        await page.locator('#settings-btn').click();
+        await page.locator('#edit-custom-btn').click();
         await expect(page.locator('#custom-text')).toHaveValue(expected);
     });
 

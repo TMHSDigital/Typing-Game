@@ -145,6 +145,29 @@
                             <option value="sql">SQL</option>
                             <option value="shell">Shell</option>
                         </select>
+                        <label class="option-check" id="punctuation-option">
+                            <input type="checkbox" id="punctuation-toggle" />
+                            Punctuation
+                        </label>
+                        <label class="option-check" id="numbers-option">
+                            <input type="checkbox" id="numbers-toggle" />
+                            Numbers
+                        </label>
+                        <label
+                            class="option-check hidden"
+                            id="auto-indent-option"
+                            title="Leading spaces after a new line are filled in for you"
+                        >
+                            <input type="checkbox" id="auto-indent-toggle" checked />
+                            Skip indentation
+                        </label>
+                        <button
+                            id="edit-custom-btn"
+                            class="option-btn hidden"
+                            aria-haspopup="dialog"
+                        >
+                            Edit text
+                        </button>
                         <p id="practice-note" class="practice-note hidden"></p>
                     </div>
 
@@ -342,128 +365,139 @@
             <div class="modal-content settings-content">
                 <h2 id="settings-title">Settings</h2>
 
-                <div class="setting-group">
-                    <span class="setting-label" id="mode-label">Game Mode</span>
-                    <div
-                        class="pill-selector"
-                        id="mode-selector"
-                        role="group"
-                        aria-labelledby="mode-label"
-                    >
-                        <button class="pill active" data-value="time" aria-pressed="true">
-                            Time
-                        </button>
-                        <button class="pill" data-value="words" aria-pressed="false">Words</button>
-                    </div>
+                <div class="settings-body">
+                    <section class="setting-group" aria-labelledby="rules-heading">
+                        <h3 class="setting-heading" id="rules-heading">Practice rules</h3>
+                        <label class="toggle-label">
+                            <span class="setting-text">
+                                <span class="setting-name" id="stop-on-error-name">
+                                    Stop on error
+                                </span>
+                                <span class="setting-desc" id="stop-on-error-desc">
+                                    The caret stays put until you type the right key.
+                                </span>
+                            </span>
+                            <input
+                                type="checkbox"
+                                id="stop-on-error-toggle"
+                                aria-labelledby="stop-on-error-name"
+                                aria-describedby="stop-on-error-desc"
+                            />
+                            <span class="toggle-custom" aria-hidden="true"></span>
+                        </label>
+                        <label class="toggle-label">
+                            <span class="setting-text">
+                                <span class="setting-name" id="hard-mode-name">Hard mode</span>
+                                <span class="setting-desc" id="hard-mode-desc">
+                                    Characters you have typed are blurred.
+                                </span>
+                            </span>
+                            <input
+                                type="checkbox"
+                                id="hard-mode-toggle-settings"
+                                aria-labelledby="hard-mode-name"
+                                aria-describedby="hard-mode-desc"
+                            />
+                            <span class="toggle-custom" aria-hidden="true"></span>
+                        </label>
+                    </section>
+
+                    <section class="setting-group" aria-labelledby="ghost-heading">
+                        <h3 class="setting-heading" id="ghost-heading">Ghost</h3>
+                        <label class="toggle-label">
+                            <span class="setting-text">
+                                <span class="setting-name" id="ghost-mode-name">Ghost mode</span>
+                                <span class="setting-desc" id="ghost-mode-desc">
+                                    A second cursor replays your best run at these settings.
+                                </span>
+                            </span>
+                            <input
+                                type="checkbox"
+                                id="ghost-mode-toggle"
+                                aria-labelledby="ghost-mode-name"
+                                aria-describedby="ghost-mode-desc"
+                            />
+                            <span class="toggle-custom" aria-hidden="true"></span>
+                        </label>
+                    </section>
+
+                    <section class="setting-group" aria-labelledby="theme-label">
+                        <h3 class="setting-heading" id="theme-label">Appearance</h3>
+                        <div
+                            class="pill-selector"
+                            id="theme-selector"
+                            role="group"
+                            aria-labelledby="theme-label"
+                        >
+                            <button class="pill active" data-value="system" aria-pressed="true">
+                                System
+                            </button>
+                            <button class="pill" data-value="dark" aria-pressed="false">
+                                Dark
+                            </button>
+                            <button class="pill" data-value="light" aria-pressed="false">
+                                Light
+                            </button>
+                            <button class="pill" data-value="contrast" aria-pressed="false">
+                                Contrast
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="setting-group" aria-labelledby="sound-heading">
+                        <h3 class="setting-heading" id="sound-heading">Sound</h3>
+                        <label class="toggle-label">
+                            <span class="setting-text">
+                                <span class="setting-name" id="sound-name">Sound effects</span>
+                                <span class="setting-desc" id="sound-desc">
+                                    A click per key, a buzz on mistakes, a chime at the end.
+                                </span>
+                            </span>
+                            <input
+                                type="checkbox"
+                                id="sound-toggle-settings"
+                                aria-labelledby="sound-name"
+                                aria-describedby="sound-desc"
+                                checked
+                            />
+                            <span class="toggle-custom" aria-hidden="true"></span>
+                        </label>
+                    </section>
                 </div>
 
-                <div class="setting-group" id="timer-setting">
-                    <span class="setting-label" id="duration-label">Duration</span>
-                    <div
-                        class="pill-selector"
-                        id="duration-selector"
-                        role="group"
-                        aria-labelledby="duration-label"
-                    >
-                        <button class="pill" data-value="15" aria-pressed="false">15s</button>
-                        <button class="pill" data-value="30" aria-pressed="false">30s</button>
-                        <button class="pill active" data-value="60" aria-pressed="true">60s</button>
-                    </div>
+                <div class="modal-actions settings-footer">
+                    <button id="close-settings-btn" class="action-btn primary">Done</button>
                 </div>
+            </div>
+        </div>
 
-                <div class="setting-group hidden" id="word-count-setting">
-                    <span class="setting-label" id="word-count-label">Word Count</span>
-                    <div
-                        class="pill-selector"
-                        id="word-count-selector"
-                        role="group"
-                        aria-labelledby="word-count-label"
-                    >
-                        <button class="pill active" data-value="10" aria-pressed="true">10</button>
-                        <button class="pill" data-value="25" aria-pressed="false">25</button>
-                        <button class="pill" data-value="50" aria-pressed="false">50</button>
-                    </div>
-                </div>
-
-                <div class="setting-group">
-                    <span class="setting-label" id="theme-label">Theme</span>
-                    <div
-                        class="pill-selector"
-                        id="theme-selector"
-                        role="group"
-                        aria-labelledby="theme-label"
-                    >
-                        <button class="pill active" data-value="system" aria-pressed="true">
-                            System
-                        </button>
-                        <button class="pill" data-value="dark" aria-pressed="false">Dark</button>
-                        <button class="pill" data-value="light" aria-pressed="false">Light</button>
-                        <button class="pill" data-value="contrast" aria-pressed="false">
-                            High contrast
-                        </button>
-                    </div>
-                </div>
-
-                <div class="setting-group">
-                    <span class="setting-label" id="features-label">Features</span>
-                    <div class="toggles-list" role="group" aria-labelledby="features-label">
-                        <label class="toggle-label">
-                            <input type="checkbox" id="sound-toggle-settings" checked />
-                            <span class="toggle-custom"></span>
-                            Sound Effects
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="hard-mode-toggle-settings" />
-                            <span class="toggle-custom"></span>
-                            Hard Mode (blur what you have typed)
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="ghost-mode-toggle" />
-                            <span class="toggle-custom"></span>
-                            Ghost Mode (replay your best run)
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="punctuation-toggle" />
-                            <span class="toggle-custom"></span>
-                            Punctuation (Common Words)
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="numbers-toggle" />
-                            <span class="toggle-custom"></span>
-                            Numbers (Common Words)
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="stop-on-error-toggle" />
-                            <span class="toggle-custom"></span>
-                            Stop on error (fix each mistake before moving on)
-                        </label>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="auto-indent-toggle" checked />
-                            <span class="toggle-custom"></span>
-                            Skip indentation in code (fill in leading spaces after a new line)
-                        </label>
-                    </div>
-                </div>
-
-                <div class="setting-group">
-                    <label class="setting-label" for="custom-text">Custom text</label>
+        <!-- Custom Text Modal -->
+        <div
+            id="custom-modal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="custom-title"
+        >
+            <div class="modal-content settings-content">
+                <h2 id="custom-title">Custom text</h2>
+                <div class="settings-body">
+                    <label class="setting-name" for="custom-text">Text to type</label>
                     <textarea
                         id="custom-text"
                         class="custom-text"
-                        rows="4"
+                        rows="8"
                         maxlength="4000"
                         spellcheck="false"
                         aria-describedby="custom-text-help"
                     ></textarea>
                     <p id="custom-text-help" class="setting-help">
-                        Used by the Custom Text category. Pasting works here. Curly quotes and
-                        dashes become plain ones, line breaks become spaces, and text past 2000
-                        characters is dropped.
+                        Pasting works here. Curly quotes and dashes become plain ones, line breaks
+                        become spaces, and text past 2000 characters is dropped.
                     </p>
                 </div>
-
-                <div class="modal-actions">
-                    <button id="close-settings-btn" class="action-btn primary">Done</button>
+                <div class="modal-actions settings-footer">
+                    <button id="close-custom-btn" class="action-btn primary">Done</button>
                 </div>
             </div>
         </div>

@@ -42,6 +42,11 @@ const playAgainBtn = document.getElementById('play-again-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 
+// Custom text dialog
+const customModal = document.getElementById('custom-modal');
+const editCustomBtn = document.getElementById('edit-custom-btn');
+const closeCustomBtn = document.getElementById('close-custom-btn');
+
 // Stats dialog
 const statsModal = document.getElementById('stats-modal');
 const statsBtn = document.getElementById('stats-btn');
@@ -56,12 +61,7 @@ const clearBtn = document.getElementById('clear-btn');
 const closeStatsBtn = document.getElementById('close-stats-btn');
 
 // Settings inputs
-const modeSelector = document.getElementById('mode-selector');
-const durationSelector = document.getElementById('duration-selector');
-const wordCountSelector = document.getElementById('word-count-selector');
 const themeSelector = document.getElementById('theme-selector');
-const timerSettingGroup = document.getElementById('timer-setting');
-const wordCountSettingGroup = document.getElementById('word-count-setting');
 const soundToggle = document.getElementById('sound-toggle-settings');
 const hardModeToggle = document.getElementById('hard-mode-toggle-settings');
 const ghostModeToggle = document.getElementById('ghost-mode-toggle');
@@ -70,6 +70,10 @@ const numbersToggle = document.getElementById('numbers-toggle');
 const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
 const customTextInput = document.getElementById('custom-text');
 const autoIndentToggle = document.getElementById('auto-indent-toggle');
+// Main-screen options shown only for the categories they apply to
+const punctuationOption = document.getElementById('punctuation-option');
+const numbersOption = document.getElementById('numbers-option');
+const autoIndentOption = document.getElementById('auto-indent-option');
 const codeLanguageSelect = document.getElementById('code-language-select');
 const capsWarning = document.getElementById('caps-warning');
 const ghostStatus = document.getElementById('ghost-status');
@@ -411,7 +415,12 @@ function pickQuote(categoryQuotes) {
 
 // Random common words with no word twice in a row, plus optional
 // punctuation (capitalized sentences, commas, full stops) and numbers.
-function commonWords(count, list = COMMON_WORDS) {
+// Only Common Words shows those options, so other callers turn them off.
+function commonWords(
+    count,
+    list = COMMON_WORDS,
+    { punctuation = gameState.hasPunctuation, numbers = gameState.hasNumbers } = {}
+) {
     const words = [];
     let previous = '';
     let sentenceStart = true;
@@ -422,10 +431,10 @@ function commonWords(count, list = COMMON_WORDS) {
         } while (word === previous);
         previous = word;
 
-        if (gameState.hasNumbers && runtime.random() < 0.1) {
+        if (numbers && runtime.random() < 0.1) {
             word = String(1 + Math.floor(runtime.random() * 9999));
         }
-        if (gameState.hasPunctuation) {
+        if (punctuation) {
             if (sentenceStart) word = word[0].toUpperCase() + word.slice(1);
             sentenceStart = false;
             const roll = runtime.random();
@@ -452,7 +461,8 @@ function wordsWithKeys(keys) {
 function getPassage() {
     if (gameState.category === 'weak') {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
-        return { text: commonWords(count, wordsWithKeys(runtime.weakKeys)), source: '' };
+        const plain = { punctuation: false, numbers: false };
+        return { text: commonWords(count, wordsWithKeys(runtime.weakKeys), plain), source: '' };
     }
     if (gameState.category === 'code') {
         const snippets = CODE_SNIPPETS[gameState.codeLanguage];
@@ -578,7 +588,7 @@ function renderNewQuote() {
 
 // --- Core Logic ---
 function handleInput() {
-    if (settingsModal.classList.contains('show')) return;
+    if (isModalOpen(settingsModal) || isModalOpen(customModal)) return;
     if (!runtime.isStarted) startGame();
 
     // The interval checks the clock only every 250 ms. Input that arrives
@@ -1020,6 +1030,7 @@ function resetGame() {
     resultModal.classList.remove('show');
     settingsModal.classList.remove('show');
     statsModal.classList.remove('show');
+    customModal.classList.remove('show');
 
     updateQuickBar();
     updateHighScoreDisplay();
@@ -1029,7 +1040,8 @@ function resetGame() {
     typingInputElement.focus();
 }
 
-// The mode and length pills on the main screen mirror gameState.
+// The mode and length pills and the category options on the main screen
+// mirror gameState. Each category option is shown only where it applies.
 function updateQuickBar() {
     setActivePill(quickMode, gameState.mode);
     setActivePill(quickDuration, String(gameState.duration));
@@ -1038,13 +1050,17 @@ function updateQuickBar() {
     quickWordCount.classList.toggle('hidden', gameState.mode !== 'words');
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
     codeLanguageSelect.classList.toggle('hidden', gameState.category !== 'code');
+    autoIndentOption.classList.toggle('hidden', gameState.category !== 'code');
+    punctuationOption.classList.toggle('hidden', gameState.category !== 'common');
+    numbersOption.classList.toggle('hidden', gameState.category !== 'common');
+    editCustomBtn.classList.toggle('hidden', gameState.category !== 'custom');
 
     const weak = runtime.weakKeys;
     const noCustomText = gameState.category === 'custom' && !gameState.customText;
     practiceNote.classList.toggle('hidden', gameState.category !== 'weak' && !noCustomText);
     if (noCustomText) {
         practiceNote.textContent =
-            'No custom text yet. Add it in Settings; using common words until then.';
+            'No custom text yet. Add it with Edit text; using common words until then.';
     } else if (!weak.length) {
         practiceNote.textContent = 'Not enough mistakes recorded yet. Using all common words.';
     } else {
@@ -1410,12 +1426,7 @@ function setActivePill(selector, value) {
 
 // Push gameState into the settings controls and the quote display.
 function applySettingsToUI() {
-    setActivePill(modeSelector, gameState.mode);
-    setActivePill(durationSelector, String(gameState.duration));
-    setActivePill(wordCountSelector, String(gameState.wordCount));
     setActivePill(themeSelector, gameState.theme);
-    timerSettingGroup.classList.toggle('hidden', gameState.mode !== 'time');
-    wordCountSettingGroup.classList.toggle('hidden', gameState.mode !== 'words');
     categorySelect.value = gameState.category;
     soundToggle.checked = gameState.isSoundEnabled;
     hardModeToggle.checked = gameState.isHardMode;
@@ -1437,13 +1448,29 @@ function openSettings() {
     typingInputElement.blur();
     settingsModal.classList.add('show');
     updateFocusHint();
-    focusInDialog(modeSelector.querySelector('.pill.active') || closeSettingsBtn);
+    focusInDialog(stopOnErrorToggle);
 }
 
-// Pill clicks update gameState immediately; the new settings take effect
-// when the modal closes and the game resets.
+// Toggle and pill changes update gameState immediately; the new settings
+// take effect when the modal closes and the game resets.
 function closeSettings() {
     settingsModal.classList.remove('show');
+    saveSettings();
+    resetGame();
+}
+
+// Like Settings, the custom text dialog abandons a run in progress.
+function openCustomText() {
+    if (runtime.isStarted) resetGame();
+    typingInputElement.blur();
+    customTextInput.value = gameState.customText;
+    customModal.classList.add('show');
+    updateFocusHint();
+    focusInDialog(customTextInput);
+}
+
+function closeCustomText() {
+    customModal.classList.remove('show');
     gameState.customText = normalizeCustomText(customTextInput.value);
     customTextInput.value = gameState.customText;
     saveSettings();
@@ -1465,10 +1492,7 @@ function applyTheme() {
 }
 
 function applyPill(group, value) {
-    if (group === 'theme') {
-        gameState.theme = THEMES.includes(value) ? value : 'system';
-        applyTheme();
-    } else if (group === 'mode') {
+    if (group === 'mode') {
         gameState.mode = value === 'words' ? 'words' : 'time';
     } else if (group === 'duration') {
         gameState.duration = parseInt(value, 10);
@@ -1477,13 +1501,12 @@ function applyPill(group, value) {
     }
 }
 
-function handlePillClick(e, group) {
+function handleThemeClick(e) {
     const pill = e.target.closest('.pill');
     if (!pill) return;
-    setActivePill(e.currentTarget, pill.dataset.value);
-    applyPill(group, pill.dataset.value);
-    timerSettingGroup.classList.toggle('hidden', gameState.mode !== 'time');
-    wordCountSettingGroup.classList.toggle('hidden', gameState.mode !== 'words');
+    setActivePill(themeSelector, pill.dataset.value);
+    gameState.theme = THEMES.includes(pill.dataset.value) ? pill.dataset.value : 'system';
+    applyTheme();
 }
 
 // Main-screen pills change the setting and start a fresh run at once, like
@@ -1738,7 +1761,7 @@ function isModalOpen(modal) {
 }
 
 function openModal() {
-    return [settingsModal, statsModal, resultModal].find(isModalOpen) || null;
+    return [settingsModal, customModal, statsModal, resultModal].find(isModalOpen) || null;
 }
 
 // Keep Tab and Shift+Tab inside the open dialog.
@@ -1783,6 +1806,7 @@ function handleKeydown(e) {
     const modal = openModal();
     if (e.key === 'Escape') {
         if (modal === settingsModal) closeSettings();
+        else if (modal === customModal) closeCustomText();
         else if (modal === statsModal) closeStats();
         else if (modal === resultModal) resetGame();
         return;
@@ -1834,10 +1858,9 @@ function init() {
     });
     clearBtn.addEventListener('click', clearData);
     closeSettingsBtn.addEventListener('click', closeSettings);
-    modeSelector.addEventListener('click', (e) => handlePillClick(e, 'mode'));
-    durationSelector.addEventListener('click', (e) => handlePillClick(e, 'duration'));
-    wordCountSelector.addEventListener('click', (e) => handlePillClick(e, 'wordCount'));
-    themeSelector.addEventListener('click', (e) => handlePillClick(e, 'theme'));
+    editCustomBtn.addEventListener('click', openCustomText);
+    closeCustomBtn.addEventListener('click', closeCustomText);
+    themeSelector.addEventListener('click', handleThemeClick);
     prefersLight.addEventListener('change', applyTheme);
     prefersContrast.addEventListener('change', applyTheme);
     quickMode.addEventListener('click', (e) => handleQuickPillClick(e, 'mode'));
@@ -1860,18 +1883,22 @@ function init() {
     ghostModeToggle.addEventListener('change', (e) => {
         gameState.isGhostEnabled = e.target.checked;
     });
-    punctuationToggle.addEventListener('change', (e) => {
-        gameState.hasPunctuation = e.target.checked;
-    });
-    numbersToggle.addEventListener('change', (e) => {
-        gameState.hasNumbers = e.target.checked;
-    });
     stopOnErrorToggle.addEventListener('change', (e) => {
         gameState.isStopOnError = e.target.checked;
     });
-    autoIndentToggle.addEventListener('change', (e) => {
-        gameState.isAutoIndent = e.target.checked;
-    });
+    // Category options on the main screen save and reset at once.
+    const optionToggles = [
+        [punctuationToggle, 'hasPunctuation'],
+        [numbersToggle, 'hasNumbers'],
+        [autoIndentToggle, 'isAutoIndent'],
+    ];
+    for (const [toggle, flag] of optionToggles) {
+        toggle.addEventListener('change', (e) => {
+            gameState[flag] = e.target.checked;
+            saveSettings();
+            resetGame();
+        });
+    }
     codeLanguageSelect.addEventListener('change', (e) => {
         gameState.codeLanguage = e.target.value;
         saveSettings();
