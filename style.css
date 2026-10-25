@@ -624,6 +624,16 @@ input:checked + .toggle-custom::after {
     border-radius: var(--radius-sm);
 }
 
+.storage-warning {
+    margin-bottom: 1rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--on-warning);
+    background: var(--color-warning);
+    border-radius: var(--radius-sm);
+}
+
 /* Shown over the passage when the input does not have focus */
 .focus-hint {
     position: absolute;

@@ -3,7 +3,8 @@
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
-   getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement, bests */
+   getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
+   currentBest, validBests */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -2329,6 +2330,66 @@ test('the service worker removes caches from older versions', async ({ browser }
     await page.evaluate(() => navigator.serviceWorker.ready);
     await expect.poll(() => page.evaluate(() => caches.keys())).toEqual(['typespeed-v2']);
     await context.close();
+});
+
+test.describe('storage', () => {
+    test('a failed save shows a notice that says to export', async ({ page }) => {
+        await page.addInitScript(() => {
+            Storage.prototype.setItem = () => {
+                throw new DOMException('Quota exceeded', 'QuotaExceededError');
+            };
+        });
+        await page.goto('/');
+        await expect(page.locator('#storage-warning')).toBeHidden();
+        await page.locator('#quick-mode [data-value="words"]').click();
+        await expect(page.locator('#storage-warning')).toBeVisible();
+        await expect(page.locator('#storage-warning')).toContainText(
+            'Progress could not be saved: browser storage is full or blocked.'
+        );
+        await expect(page.locator('#storage-warning')).toHaveAttribute('role', 'alert');
+    });
+
+    test('a best stores its keystrokes as differences and replays them', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        });
+        await page.goto('/');
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        const { stored, strokes } = await page.evaluate(() => ({
+            stored: JSON.parse(localStorage.getItem('typingGameBests'))['words:10w:common'],
+            strokes: runtime.ghostStrokes,
+        }));
+        expect(stored.keystrokes.every((n) => typeof n === 'number')).toBe(true);
+        expect(stored.keystrokes).toHaveLength(strokes.length * 2);
+        // Less than half the size of one {t, i} object per keystroke.
+        expect(JSON.stringify(stored.keystrokes).length).toBeLessThan(
+            JSON.stringify(strokes).length / 2
+        );
+        expect(await page.evaluate(() => bestStrokes(currentBest()))).toEqual(strokes);
+    });
+
+    test('bests saved as {t, i} objects still replay, and import converts them', async ({
+        page,
+    }) => {
+        const strokes = [
+            { t: 100, i: 1 },
+            { t: 250, i: 2 },
+        ];
+        await page.addInitScript((list) => {
+            localStorage.setItem(
+                'typingGameBests',
+                JSON.stringify({ 'time:60s:common': { wpm: 40, keystrokes: list } })
+            );
+        }, strokes);
+        await page.goto('/');
+        expect(await page.evaluate(() => bestStrokes(currentBest()))).toEqual(strokes);
+        const imported = await page.evaluate(
+            (list) => validBests({ 'time:60s:common': { wpm: 40, keystrokes: list } }),
+            strokes
+        );
+        expect(imported['time:60s:common'].keystrokes).toEqual([100, 1, 150, 1]);
+    });
 });
 
 test('the manifest names the app and its icons', async ({ request }) => {

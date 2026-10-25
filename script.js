@@ -19,6 +19,7 @@ const quickMode = document.getElementById('quick-mode');
 const quickDuration = document.getElementById('quick-duration');
 const quickWordCount = document.getElementById('quick-word-count');
 const ghostBadge = document.getElementById('ghost-badge');
+const storageWarning = document.getElementById('storage-warning');
 
 // Modals
 const resultModal = document.getElementById('result-modal');
@@ -105,13 +106,48 @@ function loadJSON(key, fallback) {
     }
 }
 
+// A failed save (storage full, or blocked in some private modes) shows a
+// notice that stays until the page is reloaded.
 function saveJSON(key, value) {
     try {
         localStorage.setItem(key, JSON.stringify(value));
     } catch (err) {
         console.warn(`Could not save ${key} to localStorage`, err);
+        storageWarning.classList.remove('hidden');
     }
 }
+
+// Keystroke timings, {t: ms since start, i: character index} per input
+// event, are stored as a flat list of differences, [t1, i1, t2 - t1,
+// i2 - i1, ...], about a third of the size in JSON. Bests store them this
+// way and challenge links carry them. Bests saved before this hold the
+// objects themselves; bestStrokes reads both.
+function encodeStrokes(strokes) {
+    const deltas = [];
+    let t = 0;
+    let i = 0;
+    for (const stroke of strokes) {
+        deltas.push(stroke.t - t, stroke.i - i);
+        t = stroke.t;
+        i = stroke.i;
+    }
+    return deltas;
+}
+
+function decodeStrokes(deltas) {
+    const strokes = [];
+    let t = 0;
+    let i = 0;
+    for (let n = 0; n + 1 < deltas.length; n += 2) {
+        t += deltas[n];
+        i += deltas[n + 1];
+        strokes.push({ t, i });
+    }
+    return strokes;
+}
+
+const bestStrokes = (best) =>
+    typeof best.keystrokes[0] === 'object' ? best.keystrokes : decodeStrokes(best.keystrokes);
 
 // --- Game State ---
 const DURATIONS = [15, 30, 60];
@@ -747,9 +783,9 @@ function startGame() {
     // A ghost recorded on other text would not match this passage.
     if (runtime.challenge) {
         runtime.challenge.used = true;
-        if (!runtime.textChanged) startGhostPlayback({ keystrokes: runtime.challenge.strokes });
+        if (!runtime.textChanged) startGhostPlayback(runtime.challenge.strokes);
     } else if (gameState.isGhostEnabled && best && !runtime.textChanged) {
-        startGhostPlayback(best);
+        startGhostPlayback(bestStrokes(best));
     }
     updateGhostStatus();
 }
@@ -770,9 +806,9 @@ function tick() {
     updateMetrics();
 }
 
-function startGhostPlayback(best) {
+function startGhostPlayback(strokes) {
     if (!document.getElementById('ghost-cursor')) return;
-    runtime.ghostTimeouts = best.keystrokes.map((stroke) =>
+    runtime.ghostTimeouts = strokes.map((stroke) =>
         setTimeout(() => {
             if (!runtime.isStarted) return;
             // Look everything up live: the quote (and its spans) may have
@@ -906,7 +942,7 @@ function endGame(endTime = performance.now()) {
         if (wpm > (previousBest ? previousBest.wpm : 0)) {
             bests[key] = {
                 wpm,
-                keystrokes: runtime.ghostStrokes,
+                keystrokes: encodeStrokes(runtime.ghostStrokes),
                 seed: runtime.seed,
                 textHash: runtime.passageHash,
             };
@@ -1326,14 +1362,7 @@ function parseChallenge(data) {
 }
 
 function challengePayload() {
-    const deltas = [];
-    let t = 0;
-    let i = 0;
-    for (const stroke of runtime.ghostStrokes.slice(0, CHALLENGE_MAX_STROKES)) {
-        deltas.push(stroke.t - t, stroke.i - i);
-        t = stroke.t;
-        i = stroke.i;
-    }
+    const deltas = encodeStrokes(runtime.ghostStrokes.slice(0, CHALLENGE_MAX_STROKES));
     const settings = {};
     for (const name of CHALLENGE_SETTINGS) settings[name] = gameState[name];
     settings.category = passageCategory();
@@ -1663,7 +1692,11 @@ function validBests(map) {
     if (!map || typeof map !== 'object' || Array.isArray(map)) return result;
     for (const [key, best] of Object.entries(map)) {
         if (!best || !isNumber(best.wpm) || !Array.isArray(best.keystrokes)) continue;
-        const keystrokes = best.keystrokes.filter((s) => s && isNumber(s.t) && isNumber(s.i));
+        // Either form is accepted; both are stored as differences.
+        const list = best.keystrokes;
+        const keystrokes = list.every(isNumber)
+            ? list.slice(0, list.length - (list.length % 2))
+            : encodeStrokes(list.filter((s) => s && isNumber(s.t) && isNumber(s.i)));
         result[key] = { wpm: best.wpm, keystrokes };
         if (Number.isInteger(best.seed)) result[key].seed = best.seed;
         if (isTextHash(best.textHash)) result[key].textHash = best.textHash;
