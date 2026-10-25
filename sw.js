@@ -6,9 +6,10 @@
  * gets the saved copy instead; the response still updates the cache when
  * it arrives.
  */
-// Change the version when FILES changes: activate deletes every other cache,
-// so files removed from the site do not stay saved.
-const CACHE = 'typespeed-v2';
+// The cache is named after VERSION in script.js and changes with it:
+// activate deletes every other cache, so files removed from the site do not
+// stay saved.
+const CACHE = 'typespeed-1.1.0';
 const NETWORK_TIMEOUT = 3000; // ms
 const FILES = [
     './',

@@ -58,6 +58,8 @@ Serve the folder with `npm run serve` (see Development) or any static file serve
 
 Pasting into the input is blocked, and the caret stays at the end: arrow keys, Home, End, select-all, and clicks do not move it.
 
+- **Version**: the footer shows the version and links to `CHANGELOG.md`. A visitor whose saved settings come from an older version sees one line above the controls naming what changed, once; a first visit shows nothing.
+
 ## Privacy
 
 There is no account and no backend: GitHub Pages serves the static files, and the page makes no requests to other sites, which a test checks. Settings, run history, best scores, key stats, and daily results are stored in this browser's `localStorage`, under the keys listed below, and are not sent anywhere. Challenge links carry one run's settings, seed, first passage hash, WPM, and keystroke timings in the URL hash, which browsers do not send to the server; they leave the browser only if you share the link.
@@ -70,7 +72,7 @@ Everything is stored in `localStorage` under these keys:
 
 | Key                  | Contents                                                                                                                                                                                                                                                                                                                      |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `typingGameSettings` | mode, duration, word count, category, and the feature toggles                                                                                                                                                                                                                                                                 |
+| `typingGameSettings` | mode, duration, word count, category, the feature toggles, and the last version seen                                                                                                                                                                                                                                          |
 | `typingGameHistory`  | last 500 runs as `{wpm, accuracy, date, mode, key}`                                                                                                                                                                                                                                                                           |
 | `typingGameBests`    | for each settings key, the best run as `{wpm, keystrokes, seed, textHash, weakKeys?}`: keystroke timings (a flat list of differences in milliseconds and character position from one input event to the next), the passage seed, and a hash of the first passage for Ghost Mode, and the letters practiced for Weak Keys runs |
 | `typingGameDaily`    | for each day's number, the first recorded daily run as `{wpm, accuracy, grid}`, for the last 400 days                                                                                                                                                                                                                         |

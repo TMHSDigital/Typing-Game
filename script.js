@@ -20,6 +20,10 @@ const quickDuration = document.getElementById('quick-duration');
 const quickWordCount = document.getElementById('quick-word-count');
 const ghostBadge = document.getElementById('ghost-badge');
 const storageWarning = document.getElementById('storage-warning');
+const updateNotice = document.getElementById('update-notice');
+const updateText = document.getElementById('update-text');
+const dismissUpdateBtn = document.getElementById('dismiss-update-btn');
+const versionLink = document.getElementById('version-link');
 
 // Modals
 const resultModal = document.getElementById('result-modal');
@@ -197,6 +201,7 @@ const DEFAULT_SETTINGS = {
     textSize: 'medium',
     lineSpacing: 'normal',
     caretStyle: 'underline',
+    lastSeenVersion: '', // VERSION when the page was last opened
 };
 
 const THEMES = ['system', 'dark', 'light', 'contrast'];
@@ -253,6 +258,12 @@ function sanitizeSettings(saved) {
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    if (
+        typeof saved.lastSeenVersion === 'string' &&
+        /^\d+\.\d+\.\d+$/.test(saved.lastSeenVersion)
+    ) {
+        settings.lastSeenVersion = saved.lastSeenVersion;
+    }
     if (SOUND_PACK_NAMES.includes(saved.soundPack)) settings.soundPack = saved.soundPack;
     for (const [setting, values] of Object.entries(PASSAGE_STYLES)) {
         if (values.includes(saved[setting])) settings[setting] = saved[setting];
@@ -2790,6 +2801,7 @@ function init() {
     replayPauseBtn.addEventListener('click', toggleReplayPause);
     replaySpeed.addEventListener('click', handleReplaySpeedClick);
     dailyBtn.addEventListener('click', toggleDaily);
+    dismissUpdateBtn.addEventListener('click', dismissUpdateNotice);
 
     document.addEventListener('keydown', handleKeydown);
     // A link opened in a tab that already has the page only changes the
@@ -2802,9 +2814,34 @@ function init() {
         });
     }
 
+    showUpdateNotice(loadJSON(STORAGE_KEYS.settings, null) !== null);
     resetGame();
     loadChallengeFromHash();
     registerServiceWorker();
+}
+
+// --- Version ---
+// Bump VERSION together with a new section in CHANGELOG.md, the cache name
+// in sw.js, and the version in package.json.
+const VERSION = '1.1.0';
+const RELEASE_NOTE = 'daily run, pace caret, replay, result image, sound sets, and passage fonts';
+
+// Returning visitors (saved settings from an older version, or from before
+// versions were recorded) see one line about the release, once. A first
+// visit writes nothing; the version is saved with the first settings change.
+function showUpdateNotice(isReturning) {
+    versionLink.textContent = VERSION;
+    if (gameState.lastSeenVersion === VERSION) return;
+    gameState.lastSeenVersion = VERSION;
+    if (!isReturning) return;
+    updateText.textContent = `Updated to ${VERSION}: ${RELEASE_NOTE}.`;
+    updateNotice.classList.remove('hidden');
+    saveJSON(STORAGE_KEYS.settings, gameState);
+}
+
+function dismissUpdateNotice() {
+    updateNotice.classList.add('hidden');
+    typingInputElement.focus();
 }
 
 // --- Offline ---

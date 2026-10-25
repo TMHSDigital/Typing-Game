@@ -4,7 +4,7 @@
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUND_PACKS, SOUND_PACK_NAMES, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
-   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette */
+   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette, VERSION */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -84,7 +84,7 @@ test.describe('loading', () => {
         await expect(page.locator('footer')).toContainText(
             'No account. Your results are stored only in this browser.'
         );
-        await expect(page.locator('footer a')).toHaveAttribute(
+        await expect(page.locator('footer a').first()).toHaveAttribute(
             'href',
             'https://github.com/TMHSDigital/Typing-Game#privacy'
         );
@@ -2893,7 +2893,7 @@ test('a network slower than the timeout gets the saved files', async ({ browser,
         }
     });
     const cacheNames = await page.evaluate(() => caches.keys());
-    expect(cacheNames).toEqual(['typespeed-v2']);
+    expect(cacheNames).toEqual([`typespeed-${await page.evaluate(() => VERSION)}`]);
 
     // Every response now takes 20 seconds.
     await context.route('**/*', async (route) => {
@@ -2917,8 +2917,63 @@ test('the service worker removes caches from older versions', async ({ browser }
     );
     await page.goto('/');
     await page.evaluate(() => navigator.serviceWorker.ready);
-    await expect.poll(() => page.evaluate(() => caches.keys())).toEqual(['typespeed-v2']);
+    const version = await page.evaluate(() => VERSION);
+    await expect.poll(() => page.evaluate(() => caches.keys())).toEqual([`typespeed-${version}`]);
     await context.close();
+});
+
+test.describe('version', () => {
+    test('the footer, sw.js, package.json, and CHANGELOG.md agree on the version', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        const version = await page.evaluate(() => VERSION);
+        await expect(page.locator('#version-link')).toHaveText(version);
+        expect(fs.readFileSync('sw.js', 'utf8')).toContain(`const CACHE = 'typespeed-${version}';`);
+        expect(JSON.parse(fs.readFileSync('package.json', 'utf8')).version).toBe(version);
+        expect(fs.readFileSync('CHANGELOG.md', 'utf8')).toContain(`## ${version} (`);
+    });
+
+    test('a visitor from an older version sees the notice once', async ({ page }) => {
+        await page.addInitScript(() => {
+            if (!sessionStorage.getItem('seeded')) {
+                sessionStorage.setItem('seeded', '1');
+                localStorage.setItem(
+                    'typingGameSettings',
+                    JSON.stringify({ lastSeenVersion: '1.0.0' })
+                );
+            }
+        });
+        await page.goto('/');
+        const version = await page.evaluate(() => VERSION);
+        await expect(page.locator('#update-notice')).toBeVisible();
+        await expect(page.locator('#update-text')).toHaveText(
+            new RegExp(`^Updated to ${version}: `)
+        );
+        await page.locator('#dismiss-update-btn').click();
+        await expect(page.locator('#update-notice')).toBeHidden();
+        await expect(input(page)).toBeFocused();
+
+        await page.reload();
+        await expect(page.locator('#update-notice')).toBeHidden();
+    });
+
+    test('settings saved before versions were recorded also get the notice', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ theme: 'dark' }));
+        });
+        await page.goto('/');
+        await expect(page.locator('#update-notice')).toBeVisible();
+    });
+
+    test('a first visit shows no notice, then or after a settings change', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.locator('#update-notice')).toBeHidden();
+        expect(await page.evaluate(() => localStorage.getItem('typingGameSettings'))).toBeNull();
+        await page.locator('#quick-mode [data-value="words"]').click();
+        await page.reload();
+        await expect(page.locator('#update-notice')).toBeHidden();
+    });
 });
 
 test.describe('stats views', () => {
