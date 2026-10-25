@@ -26,6 +26,12 @@ Every bug fix needs a test in `tests/` that fails without the fix. Tests drive t
 - Colors go through the custom properties in `style.css` so every theme can override them. Do not write `transition: all`.
 - Passages, word lists, and code snippets are in `texts.js`. Give a quote a `source` only when you can confirm the attribution.
 
+## Adding quotes, snippets, and word lists
+
+You do not need to change code to propose text. Open an issue with one of the forms: [quote](../../issues/new?template=quote.yml), [code snippet](../../issues/new?template=snippet.yml), or [word list](../../issues/new?template=word-list.yml). Each asks for the source and license. Accepted proposals get the `good first issue` label, so anyone can add them to `texts.js`.
+
+`tests/texts.spec.js` checks `texts.js` in CI: every character can be typed on a US keyboard (printable ASCII, no tabs or curly quotes), quotes are unique and at most 300 characters, snippets are unique, 2 to 9 lines, with lines of at most 100 characters and no trailing spaces, and common words are unique lowercase letters.
+
 ## Docs
 
 README and comments say what the code does. No claims about quality or speed, and no features that are not in the code.

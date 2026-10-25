@@ -1,0 +1,49 @@
+name: Propose a code snippet
+description: A snippet for the Code Snippets category.
+labels: [content]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Snippets are 2 to 9 lines, each up to 100 characters, plain ASCII, indented with spaces (no tabs), with no trailing spaces.
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - JavaScript
+        - Python
+        - Go
+        - Rust
+        - SQL
+        - Shell
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Code
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: origin
+    attributes:
+      label: Where the code comes from
+      options:
+        - I wrote it
+        - Copied from a project under a permissive license (named below)
+    validations:
+      required: true
+  - type: input
+    id: project
+    attributes:
+      label: Project and license, if copied
+      description: For example "lodash, MIT".
+  - type: checkboxes
+    id: license
+    attributes:
+      label: License
+      options:
+        - label: I agree that the snippet is published under this repository's license (Apache 2.0).
+          required: true

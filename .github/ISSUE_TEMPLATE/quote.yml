@@ -1,0 +1,45 @@
+name: Propose a quote
+description: A passage for the Quotes or Technology category.
+labels: [content]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Quotes are typed on a US keyboard: plain ASCII only, no curly quotes or long dashes, up to 300 characters.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Quotes (books, speeches, sayings)
+        - Technology (programming and computing)
+    validations:
+      required: true
+  - type: textarea
+    id: text
+    attributes:
+      label: Text
+      description: Exactly as it should be typed, on one line.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: Author and work, for example "Herman Melville, Moby-Dick".
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where the attribution can be checked
+      description: A link to the text or to a page that confirms who wrote it.
+    validations:
+      required: true
+  - type: checkboxes
+    id: license
+    attributes:
+      label: License
+      options:
+        - label: The text is in the public domain, or short enough to quote, and I have checked the attribution.
+          required: true
