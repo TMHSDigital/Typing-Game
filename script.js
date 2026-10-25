@@ -111,6 +111,7 @@ const autoIndentToggle = document.getElementById('auto-indent-toggle');
 // Main-screen options shown only for the categories they apply to
 const punctuationOption = document.getElementById('punctuation-option');
 const numbersOption = document.getElementById('numbers-option');
+const wordLanguageSelect = document.getElementById('word-language-select');
 const autoIndentOption = document.getElementById('auto-indent-option');
 const codeLanguageSelect = document.getElementById('code-language-select');
 const lessonSelect = document.getElementById('lesson-select');
@@ -203,6 +204,7 @@ const DEFAULT_SETTINGS = {
     soundPack: 'tones', // one of SOUND_PACK_NAMES
     hasPunctuation: false, // common words only
     hasNumbers: false, // common words only
+    wordLanguage: 'en', // common words only: 'en' or a key of WORD_LISTS (wordlists.js)
     isStopOnError: false, // wrong keys do not advance the caret
     layout: 'qwerty', // key of LAYOUTS; keys are remapped when it is not qwerty
     customText: '', // passage for the Custom Text category, already normalized
@@ -360,6 +362,7 @@ function sanitizeSettings(saved) {
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    if (Object.hasOwn(WORD_LISTS, saved.wordLanguage)) settings.wordLanguage = saved.wordLanguage;
     if (Number.isInteger(saved.lessonStage) && LESSON_STAGES[saved.lessonStage - 1]) {
         settings.lessonStage = saved.lessonStage;
     }
@@ -507,6 +510,7 @@ function settingsKey() {
             language === OWN_CODE ? `code-own-${textHash(gameState.ownCode)}` : `code-${language}`;
     }
     if (category === 'common') {
+        if (gameState.wordLanguage !== 'en') category += `-${gameState.wordLanguage}`;
         if (gameState.hasPunctuation) category += '+punctuation';
         if (gameState.hasNumbers) category += '+numbers';
     }
@@ -761,9 +765,13 @@ function pickQuote(categoryQuotes) {
 // Random common words with no word twice in a row, plus optional
 // punctuation (capitalized sentences, commas, full stops) and numbers.
 // Only Common Words shows those options, so other callers turn them off.
+// Common Words in the chosen language.
+const commonWordList = () =>
+    gameState.wordLanguage === 'en' ? COMMON_WORDS : WORD_LISTS[gameState.wordLanguage];
+
 function commonWords(
     count,
-    list = COMMON_WORDS,
+    list = commonWordList(),
     { punctuation = gameState.hasPunctuation, numbers = gameState.hasNumbers } = {}
 ) {
     const words = [];
@@ -1003,7 +1011,11 @@ function renderNewQuote() {
 }
 
 // --- Core Logic ---
-function handleInput() {
+// Accents a dead key shows as composition text before the letter replaces
+// them: acute, grave, circumflex, diaeresis, tilde, and caron.
+const DEAD_KEY_ACCENT = /^[\u00b4`^\u00a8~\u02c6\u02dc\u02c7]$/;
+
+function handleInput(e) {
     if (isModalOpen(settingsModal) || isModalOpen(customModal) || isModalOpen(codeModal)) return;
     if (!runtime.isStarted) startGame();
 
@@ -1032,6 +1044,12 @@ function handleInput() {
         unchanged++;
     }
     const inserted = typed.slice(unchanged);
+    // A dead key (Option+E on a Mac, for example) first inserts its accent as
+    // composition text, which the accented letter then replaces. The accent
+    // is not a keystroke: wait for the letter.
+    if (e && e.isComposing && unchanged === previous.length && DEAD_KEY_ACCENT.test(inserted)) {
+        return;
+    }
     if (inserted.length > 0) {
         const slot = Math.floor(elapsedMs() / (GRID_SECONDS * 1000));
         runtime.grid[slot] = runtime.grid[slot] || { typed: 0, wrong: 0 };
@@ -1586,6 +1604,7 @@ function updateQuickBar() {
     autoIndentOption.classList.toggle('hidden', gameState.category !== 'code');
     punctuationOption.classList.toggle('hidden', gameState.category !== 'common');
     numbersOption.classList.toggle('hidden', gameState.category !== 'common');
+    wordLanguageSelect.classList.toggle('hidden', gameState.category !== 'common');
     editCustomBtn.classList.toggle('hidden', gameState.category !== 'custom');
     editCodeBtn.classList.toggle(
         'hidden',
@@ -1603,8 +1622,7 @@ function updateQuickBar() {
         gameState.category !== 'weak' && !noCustomText && !noOwnCode && !lessons
     );
     if (lessons) {
-        const stage = LESSON_STAGES[gameState.lessonStage - 1];
-        practiceNote.textContent = `Stage ${gameState.lessonStage}, ${stage.name}: pass with ${LESSON_PASS.accuracy}% accuracy and ${LESSON_PASS.wpm} WPM.`;
+        practiceNote.textContent = `Pass: ${LESSON_PASS.accuracy}% accuracy, ${LESSON_PASS.wpm} WPM`;
     } else if (noOwnCode) {
         practiceNote.textContent =
             'No code yet. Add it with Edit code; using JavaScript snippets until then.';
@@ -2032,6 +2050,7 @@ const CHALLENGE_SETTINGS = [
     'isStopOnError',
     'isAutoIndent',
     'lessonStage',
+    'wordLanguage',
 ];
 
 function toBase64Url(bytes) {
@@ -2241,6 +2260,7 @@ const DAILY_SETTINGS = {
     category: 'common',
     hasPunctuation: true,
     hasNumbers: false,
+    wordLanguage: 'en',
     isStopOnError: false,
 };
 const DAY_MS = 86400000;
@@ -2348,6 +2368,7 @@ function applySettingsToUI() {
     lineSpacingSelect.value = gameState.lineSpacing;
     caretSelect.value = gameState.caretStyle;
     punctuationToggle.checked = gameState.hasPunctuation;
+    wordLanguageSelect.value = gameState.wordLanguage;
     numbersToggle.checked = gameState.hasNumbers;
     stopOnErrorToggle.checked = gameState.isStopOnError;
     layoutSelect.value = gameState.layout;
@@ -2499,6 +2520,10 @@ function describeKey(key) {
         language && codeLanguageSelect.querySelector(`option[value="${CSS.escape(language)}"]`);
     if (languageOption) label += ` (${languageOption.textContent})`;
     if (value === 'lessons') label += `, stage ${base.slice('lessons-'.length)}`;
+    const wordLanguage =
+        value === 'common' &&
+        wordLanguageSelect.querySelector(`option[value="${CSS.escape(base.slice(7))}"]`);
+    if (wordLanguage) label += ` (${wordLanguage.textContent})`;
     const extraLabels = extras.map((extra) => KEY_EXTRA_LABELS[extra] || extra);
     return [lengthLabel, label, ...extraLabels].join(', ');
 }
@@ -3095,6 +3120,11 @@ function init() {
     });
     lessonSelect.addEventListener('change', (e) => {
         gameState.lessonStage = Number(e.target.value);
+        saveSettings();
+        resetGame();
+    });
+    wordLanguageSelect.addEventListener('change', (e) => {
+        gameState.wordLanguage = e.target.value;
         saveSettings();
         resetGame();
     });

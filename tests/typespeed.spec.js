@@ -5,7 +5,8 @@
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUND_PACKS, SOUND_PACK_NAMES, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
    currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette, VERSION,
-   weakestKeys, keyStats, endGame, LESSON_STAGES, lessonText, seededRandom */
+   weakestKeys, keyStats, endGame, LESSON_STAGES, lessonText, seededRandom,
+   WORD_LISTS, typingInputElement */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -2352,9 +2353,7 @@ test.describe('lessons', () => {
         });
         await page.goto('/');
         await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
-        await expect(page.locator('#practice-note')).toHaveText(
-            'Stage 1, Home row: pass with 95% accuracy and 20 WPM.'
-        );
+        await expect(page.locator('#practice-note')).toHaveText('Pass: 95% accuracy, 20 WPM');
         await expect(page.locator('#lesson-select option[value="2"]')).toBeDisabled();
 
         // Too many mistakes: no pass.
@@ -2400,6 +2399,77 @@ test.describe('lessons', () => {
         await expect(other.locator('#lesson-select option[value="2"]')).toBeEnabled();
         await expect(other.locator('#lesson-select')).toHaveValue('2');
         await fresh.close();
+    });
+});
+
+test.describe('word languages', () => {
+    test('Common Words in Spanish uses the Spanish list and keeps its own bests', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        await page.locator('#word-language-select').selectOption('es');
+        const quote = await currentQuote(page);
+        const list = await page.evaluate(() => WORD_LISTS.es);
+        expect(quote.split(' ').every((word) => list.includes(word))).toBe(true);
+        expect(await page.evaluate(() => settingsKey())).toBe('time:60s:common-es');
+
+        // Accented letters are typed like any other key.
+        const first = quote.split(' ')[0];
+        await input(page).pressSequentially(first);
+        expect(await page.evaluate(() => runtime.mistakes)).toBe(0);
+
+        await page.reload();
+        await expect(page.locator('#word-language-select')).toHaveValue('es');
+        await page.locator('#category-select').selectOption('general');
+        await expect(page.locator('#word-language-select')).toBeHidden();
+    });
+
+    test('a dead-key accent and its letter count as one keystroke', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ category: 'custom', customText: 'qué' })
+            );
+        });
+        await page.goto('/');
+        await input(page).pressSequentially('qu');
+        // What a Mac sends for Option+E, then E: the accent as composition
+        // text, replaced by the accented letter.
+        await page.evaluate(() => {
+            const field = typingInputElement;
+            const compose = (value, data) => {
+                field.value = value;
+                field.dispatchEvent(
+                    new InputEvent('input', {
+                        data,
+                        inputType: 'insertCompositionText',
+                        isComposing: true,
+                    })
+                );
+            };
+            field.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+            compose('qu´', '´');
+            compose('qué', 'é');
+            field.dispatchEvent(new CompositionEvent('compositionend', { data: 'é' }));
+        });
+        // The passage is done, so Time mode has moved on to the next one.
+        await expect.poll(() => page.evaluate(() => runtime.quoteBase)).toBe(3);
+        expect(await page.evaluate(() => [runtime.keystrokes, runtime.mistakes])).toEqual([3, 0]);
+    });
+
+    test('challenge links carry the word language', async ({ page }) => {
+        await page.goto('/');
+        const parsed = await page.evaluate(() =>
+            parseChallenge({
+                v: 2,
+                s: { category: 'common', wordLanguage: 'fr' },
+                h: 'abc',
+                seed: 1,
+                wpm: 50,
+                d: [],
+            })
+        );
+        expect(parsed.settings.wordLanguage).toBe('fr');
     });
 });
 

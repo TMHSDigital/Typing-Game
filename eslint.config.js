@@ -18,6 +18,7 @@ module.exports = [
                 QUOTES: 'readonly',
                 CODE_SNIPPETS: 'readonly',
                 LESSON_HOME_WORDS: 'readonly',
+                WORD_LISTS: 'readonly',
             },
         },
         rules: {
@@ -25,7 +26,7 @@ module.exports = [
         },
     },
     {
-        files: ['texts.js', 'theme.js'],
+        files: ['texts.js', 'wordlists.js', 'theme.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',

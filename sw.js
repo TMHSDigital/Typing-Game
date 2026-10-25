@@ -17,6 +17,7 @@ const FILES = [
     'style.css',
     'theme.js',
     'texts.js',
+    'wordlists.js',
     'script.js',
     'manifest.webmanifest',
     'fonts/jetbrains-mono-latin.woff2',

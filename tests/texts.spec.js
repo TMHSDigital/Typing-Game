@@ -19,6 +19,13 @@ vm.runInNewContext(
     sandbox
 );
 const { COMMON_WORDS, QUOTES, CODE_SNIPPETS, LESSON_HOME_WORDS } = sandbox.texts;
+const wordSandbox = {};
+vm.runInNewContext(
+    `${fs.readFileSync(path.join(__dirname, '..', 'wordlists.js'), 'utf8')}
+this.lists = WORD_LISTS;`,
+    wordSandbox
+);
+const WORD_LISTS = wordSandbox.lists;
 
 // The same content in every browser project, so it is checked once.
 test.skip(({ browserName }) => browserName !== 'chromium', 'checked in Chromium only');
@@ -26,6 +33,16 @@ test.skip(({ browserName }) => browserName !== 'chromium', 'checked in Chromium 
 test('common words are unique lowercase letters', () => {
     expect(COMMON_WORDS.filter((word) => !/^[a-z]+$/.test(word))).toEqual([]);
     expect(COMMON_WORDS.length).toBe(new Set(COMMON_WORDS).size);
+});
+
+test('each other-language word list has 200 unique lowercase words', () => {
+    for (const [language, words] of Object.entries(WORD_LISTS)) {
+        expect(
+            words.filter((word) => !/^\p{Ll}+$/u.test(word)),
+            language
+        ).toEqual([]);
+        expect(new Set(words).size, language).toBe(200);
+    }
 });
 
 test('home row lesson words use only the home row, once each', () => {
