@@ -4,7 +4,8 @@
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUND_PACKS, SOUND_PACK_NAMES, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
-   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette, VERSION */
+   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette, VERSION,
+   weakestKeys, keyStats, endGame */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -2207,6 +2208,96 @@ test.describe('result image', () => {
             for (const ratio of ratios) expect(ratio).toBeGreaterThanOrEqual(4.5);
         });
     }
+});
+
+test.describe('keyboard layout', () => {
+    // Opens the page with these settings saved, typing a custom text.
+    const openWithLayout = async (page, layout, customText = 'rst Rst') => {
+        await page.addInitScript(
+            (value) => localStorage.setItem('typingGameSettings', JSON.stringify(value)),
+            { layout, category: 'custom', customText }
+        );
+        await page.goto('/');
+    };
+
+    test('with Colemak, physical keys type Colemak characters', async ({ page }) => {
+        await openWithLayout(page, 'colemak');
+        await page.keyboard.press('KeyS');
+        await page.keyboard.press('KeyD');
+        await page.keyboard.press('KeyF');
+        await expect(input(page)).toHaveValue('rst');
+        await page.keyboard.press('Space');
+        await page.keyboard.press('Shift+KeyS');
+        await expect(input(page)).toHaveValue('rst R');
+        expect(await page.evaluate(() => [runtime.keystrokes, runtime.mistakes])).toEqual([5, 0]);
+        await expect(page.locator('#quote-display span').nth(4)).toHaveClass(/correct/);
+    });
+
+    test('a key pressed while focus is elsewhere is remapped too', async ({ page }) => {
+        await openWithLayout(page, 'dvorak', 'aoeu');
+        await page.locator('#settings-btn').focus();
+        // Dvorak puts o on the physical S key.
+        await page.keyboard.press('KeyA');
+        await page.keyboard.press('KeyS');
+        await expect(input(page)).toBeFocused();
+        await expect(input(page)).toHaveValue('ao');
+    });
+
+    test('QWERTY leaves keys alone, and Ctrl shortcuts are never remapped', async ({ page }) => {
+        await openWithLayout(page, 'qwerty', 'sss');
+        await page.keyboard.press('KeyS');
+        await expect(input(page)).toHaveValue('s');
+        await page.evaluate(() => {
+            gameState.layout = 'colemak';
+        });
+        await page.keyboard.press('Control+KeyS');
+        await expect(input(page)).toHaveValue('s');
+    });
+
+    test('the layout is saved, and bests, weak keys, and the heatmap are kept per layout', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameKeyStats',
+                JSON.stringify({
+                    e: { attempts: 10, misses: 2 },
+                    'colemak:r': { attempts: 10, misses: 8 },
+                })
+            );
+        });
+        await page.clock.install();
+        await page.goto('/');
+        await page.locator('#settings-btn').click();
+        await page.locator('#layout-select').selectOption('colemak');
+        await page.locator('#close-settings-btn').click();
+        await page.reload();
+        await expect(page.locator('#layout-select')).toHaveValue('colemak');
+        expect(await page.evaluate(() => [settingsKey(), weakestKeys()])).toEqual([
+            'time:60s:common+colemak',
+            ['r'],
+        ]);
+        await page.locator('#stats-btn').click();
+        await expect(page.locator('.heatmap-row').nth(2)).toHaveText(/^arstdhneio'$/);
+        await expect(page.locator('.heat-key', { hasText: /^r$/ })).toHaveAttribute(
+            'aria-label',
+            'r: 80% missed of 10 attempts'
+        );
+        await page.keyboard.press('Escape');
+
+        // A run under Colemak records its key stats under Colemak.
+        await page.keyboard.press('KeyS');
+        await page.keyboard.press('KeyD');
+        await page.clock.runFor(1100); // runs under a second are not recorded
+        await page.evaluate(() => endGame());
+        const keys = await page.evaluate(() => Object.keys(keyStats));
+        expect(keys.filter((key) => !key.startsWith('colemak:'))).toEqual(['e']);
+
+        await page.evaluate(() => {
+            gameState.layout = 'qwerty';
+        });
+        expect(await page.evaluate(() => weakestKeys())).toEqual(['e']);
+    });
 });
 
 test.describe('challenge links', () => {

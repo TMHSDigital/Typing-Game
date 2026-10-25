@@ -486,6 +486,28 @@
                                 />
                                 <span class="toggle-custom" aria-hidden="true"></span>
                             </label>
+                            <div class="setting-row layout-row">
+                                <span class="setting-text">
+                                    <label class="setting-name" for="layout-select">
+                                        Keyboard layout
+                                    </label>
+                                    <span class="setting-desc" id="layout-desc">
+                                        Keys type as this layout, whatever your system uses.
+                                        Physical keyboards only.
+                                    </span>
+                                </span>
+                                <select
+                                    id="layout-select"
+                                    class="category-select"
+                                    aria-describedby="layout-desc"
+                                >
+                                    <option value="qwerty">QWERTY</option>
+                                    <option value="colemak">Colemak</option>
+                                    <option value="colemak-dh">Colemak-DH</option>
+                                    <option value="dvorak">Dvorak</option>
+                                    <option value="workman">Workman</option>
+                                </select>
+                            </div>
                         </section>
 
                         <section class="setting-group" aria-labelledby="ghost-heading">

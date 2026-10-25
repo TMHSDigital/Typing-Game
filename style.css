@@ -494,6 +494,13 @@ header h1 .accent {
     padding: 0.5rem 0;
 }
 
+/* On-screen keyboards cannot be remapped, so touch screens do not get it. */
+@media (pointer: coarse) {
+    .layout-row {
+        display: none;
+    }
+}
+
 .setting-controls {
     display: flex;
     flex: none;

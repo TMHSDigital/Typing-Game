@@ -75,3 +75,10 @@ test('the line being typed stays above an on-screen keyboard', async ({ page }) 
     await input(page).pressSequentially(quote.slice(1, 200));
     expect(await visible()).toBe(true);
 });
+
+test('the keyboard layout setting is not offered on touch screens', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#settings-btn').click();
+    await expect(page.locator('#stop-on-error-toggle')).toBeAttached();
+    await expect(page.locator('#layout-select')).toBeHidden();
+});

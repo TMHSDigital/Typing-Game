@@ -104,6 +104,7 @@ const caretSelect = document.getElementById('caret-select');
 const punctuationToggle = document.getElementById('punctuation-toggle');
 const numbersToggle = document.getElementById('numbers-toggle');
 const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
+const layoutSelect = document.getElementById('layout-select');
 const customTextInput = document.getElementById('custom-text');
 const autoIndentToggle = document.getElementById('auto-indent-toggle');
 // Main-screen options shown only for the categories they apply to
@@ -200,6 +201,7 @@ const DEFAULT_SETTINGS = {
     hasPunctuation: false, // common words only
     hasNumbers: false, // common words only
     isStopOnError: false, // wrong keys do not advance the caret
+    layout: 'qwerty', // key of LAYOUTS; keys are remapped when it is not qwerty
     customText: '', // passage for the Custom Text category, already normalized
     codeLanguage: 'javascript', // key of CODE_SNIPPETS (texts.js), or OWN_CODE
     ownCode: '', // code for the "Your code" language, already normalized
@@ -214,6 +216,25 @@ const DEFAULT_SETTINGS = {
 
 const THEMES = ['system', 'dark', 'light', 'contrast'];
 const PACES = ['off', 'target', 'average', 'last'];
+
+// --- Layouts ---
+// Each layout as the characters on the physical keys of a US keyboard, row
+// by row: Minus and Equal, then the top, home, and bottom letter rows. The
+// key under a character is found by its KeyboardEvent.code in LAYOUT_CODES.
+const LAYOUTS = {
+    qwerty: ['-=', 'qwertyuiop[]', "asdfghjkl;'", 'zxcvbnm,./'],
+    colemak: ['-=', 'qwfpgjluy;[]', "arstdhneio'", 'zxcvbkm,./'],
+    'colemak-dh': ['-=', 'qwfpbjluy;[]', "arstgmneio'", 'zxcdvkh,./'],
+    dvorak: ['[]', "',.pyfgcrl/=", 'aoeuidhtns-', ';qjkxbmwvz'],
+    workman: ['-=', 'qdrwbjfup;[]', "ashtgyneoi'", 'zxmcvkl,./'],
+};
+const LAYOUT_CODES = [
+    ['Minus', 'Equal'],
+    ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP'],
+    ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote'],
+    ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma', 'Period', 'Slash'],
+];
+LAYOUT_CODES[1].push('BracketLeft', 'BracketRight');
 const SOUND_PACK_NAMES = ['tones', 'mechanical', 'typewriter', 'soft']; // keys of SOUND_PACKS
 
 // How the passage looks. Each is set as a data attribute of the same name on
@@ -321,6 +342,7 @@ function sanitizeSettings(saved) {
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    if (Object.hasOwn(LAYOUTS, saved.layout)) settings.layout = saved.layout;
     if (
         typeof saved.lastSeenVersion === 'string' &&
         /^\d+\.\d+\.\d+$/.test(saved.lastSeenVersion)
@@ -417,8 +439,25 @@ const WEAK_MIN_ATTEMPTS = 5;
 const WEAK_KEY_COUNT = 3;
 const isWeakKeyCandidate = (key) => /^[!-~]$/.test(key); // printable ASCII, no space
 
+// Key stats are kept per layout: QWERTY under the character, the others
+// under '<layout>:<character>'.
+const statKey = (character) =>
+    gameState.layout === 'qwerty' ? character : `${gameState.layout}:${character}`;
+
+// The current layout's key stats, keyed by character.
+function layoutStats() {
+    const prefix = gameState.layout === 'qwerty' ? '' : `${gameState.layout}:`;
+    const result = {};
+    for (const [key, stat] of Object.entries(keyStats)) {
+        if (!key.startsWith(prefix)) continue;
+        const character = key.slice(prefix.length);
+        if (character.length === 1) result[character] = stat;
+    }
+    return result;
+}
+
 function weakestKeys() {
-    const keys = Object.entries(keyStats)
+    const keys = Object.entries(layoutStats())
         .filter(([key, stat]) => isWeakKeyCandidate(key) && stat && stat.misses > 0)
         .filter(([, stat]) => stat.attempts >= WEAK_MIN_ATTEMPTS)
         .sort(([, a], [, b]) => b.misses / b.attempts - a.misses / a.attempts)
@@ -448,6 +487,7 @@ function settingsKey() {
     }
     if (category.startsWith('code-') && !gameState.isAutoIndent) category += '+noindent';
     if (gameState.isStopOnError) category += '+stop';
+    if (gameState.layout !== 'qwerty') category += `+${gameState.layout}`;
     return `${gameState.mode}:${length}:${category}`;
 }
 
@@ -1267,8 +1307,8 @@ function endGame(endTime = performance.now()) {
         saveJSON(STORAGE_KEYS.history, runHistory);
 
         for (const [key, stat] of Object.entries(runtime.keyStats)) {
-            const total = keyStats[key] || { attempts: 0, misses: 0 };
-            keyStats[key] = {
+            const total = keyStats[statKey(key)] || { attempts: 0, misses: 0 };
+            keyStats[statKey(key)] = {
                 attempts: total.attempts + stat.attempts,
                 misses: total.misses + stat.misses,
             };
@@ -2221,6 +2261,7 @@ function applySettingsToUI() {
     punctuationToggle.checked = gameState.hasPunctuation;
     numbersToggle.checked = gameState.hasNumbers;
     stopOnErrorToggle.checked = gameState.isStopOnError;
+    layoutSelect.value = gameState.layout;
     autoIndentToggle.checked = gameState.isAutoIndent;
     codeLanguageSelect.value = gameState.codeLanguage;
     customTextInput.value = gameState.customText;
@@ -2347,7 +2388,14 @@ function handleQuickPillClick(e, group) {
 }
 
 // --- Stats ---
-const KEY_EXTRA_LABELS = { stop: 'stop on error', noindent: 'indentation typed' };
+const KEY_EXTRA_LABELS = {
+    stop: 'stop on error',
+    noindent: 'indentation typed',
+    colemak: 'Colemak',
+    'colemak-dh': 'Colemak-DH',
+    dvorak: 'Dvorak',
+    workman: 'Workman',
+};
 
 // "time:60s:common+punctuation" -> "60s, Common Words, punctuation"
 function describeKey(key) {
@@ -2378,15 +2426,21 @@ function tableRow(cells) {
 
 // A US QWERTY layout. Each key counts the character on it and its shifted
 // one (a letter's capital, or the symbol above a digit or punctuation key).
-const HEATMAP_ROWS = ['`1234567890-=', 'qwertyuiop[]\\', "asdfghjkl;'", 'zxcvbnm,./', ' '];
+// The keyboard of the current layout, with the digits and backslash of a
+// US keyboard.
+function heatmapRows() {
+    const [numbers, top, home, bottom] = LAYOUTS[gameState.layout];
+    return [`\`1234567890${numbers}`, `${top}\\`, home, bottom, ' '];
+}
 const SHIFTED = '~!@#$%^&*()_+{}|:"<>?';
 const UNSHIFTED = "`1234567890-=[]\\;',./";
 
-function keyStat(key) {
-    const shifted = /[a-z]/.test(key) ? key.toUpperCase() : SHIFTED[UNSHIFTED.indexOf(key)];
+const shiftOf = (key) => (/[a-z]/.test(key) ? key.toUpperCase() : SHIFTED[UNSHIFTED.indexOf(key)]);
+
+function keyStat(key, stats = layoutStats()) {
     const total = { attempts: 0, misses: 0 };
-    for (const character of [key, shifted]) {
-        const stat = keyStats[character];
+    for (const character of [key, shiftOf(key)]) {
+        const stat = stats[character];
         if (!stat) continue;
         total.attempts += stat.attempts;
         total.misses += stat.misses;
@@ -2397,7 +2451,8 @@ function keyStat(key) {
 // Keys shaded by miss rate, relative to the most missed key. Each key's
 // accessible name carries its rate and attempts.
 function renderHeatmap() {
-    const stats = HEATMAP_ROWS.map((row) => [...row].map((key) => [key, keyStat(key)]));
+    const current = layoutStats();
+    const stats = heatmapRows().map((row) => [...row].map((key) => [key, keyStat(key, current)]));
     const rates = stats
         .flat()
         .filter(([, stat]) => stat.attempts >= WEAK_MIN_ATTEMPTS)
@@ -2693,8 +2748,37 @@ const CARET_KEYS = [
     'PageDown',
 ];
 
+// The character the chosen layout puts on the physical key, or '' when the
+// key is not remapped. Caps Lock works on letters as on a real keyboard.
+function layoutCharacter(e) {
+    const rows = LAYOUTS[gameState.layout];
+    for (let row = 0; row < LAYOUT_CODES.length; row++) {
+        const index = LAYOUT_CODES[row].indexOf(e.code);
+        if (index === -1) continue;
+        const character = rows[row][index];
+        const caps = /[a-z]/.test(character) && e.getModifierState('CapsLock');
+        return e.shiftKey !== caps ? shiftOf(character) : character;
+    }
+    return '';
+}
+
+// With a layout other than QWERTY, a remapped key types its character here
+// instead of the system's, through the same path as any other input.
+function typeWithLayout(e) {
+    if (gameState.layout === 'qwerty' || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) {
+        return;
+    }
+    const character = layoutCharacter(e);
+    if (!character) return;
+    e.preventDefault();
+    if (typingInputElement.value.length >= typingInputElement.maxLength) return;
+    typingInputElement.value += character;
+    handleInput();
+}
+
 function handleInputKeydown(e) {
     updateCapsWarning(e);
+    typeWithLayout(e);
     const selectAll = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a';
     if (CARET_KEYS.includes(e.key) || selectAll) e.preventDefault();
 }
@@ -2765,6 +2849,8 @@ function refocusOnType(e) {
     if (active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName)) return;
     if (e.key === ' ' && active && active.tagName === 'BUTTON') return;
     typingInputElement.focus();
+    // This key was pressed elsewhere, so the input's own handler missed it.
+    typeWithLayout(e);
 }
 
 function handleKeydown(e) {
@@ -2886,6 +2972,9 @@ function init() {
     });
     stopOnErrorToggle.addEventListener('change', (e) => {
         gameState.isStopOnError = e.target.checked;
+    });
+    layoutSelect.addEventListener('change', (e) => {
+        gameState.layout = e.target.value;
     });
     // Category options on the main screen save and reset at once.
     const optionToggles = [
