@@ -440,6 +440,37 @@ header h1 .accent {
     color: var(--text-muted);
 }
 
+/* A settings row with a menu or field instead of a switch */
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+
+.setting-controls {
+    display: flex;
+    flex: none;
+    gap: 0.5rem;
+}
+
+.number-input {
+    width: 4.5rem;
+    background: var(--sunken-2);
+    color: var(--text-main);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.5rem;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+}
+
+.number-input:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
 /* Keep the real checkbox focusable for keyboard users, but out of sight */
 .toggle-label input {
     position: absolute;
@@ -1160,6 +1191,25 @@ footer {
 .settings-body {
     overflow-y: auto;
     min-height: 0;
+}
+
+/* Settings: two columns where there is room, one below the other otherwise */
+#settings-modal .settings-content {
+    max-width: 860px;
+}
+
+@media (min-width: 760px) {
+    #settings-modal .settings-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 2.5rem;
+    }
+}
+
+@media (max-width: 759px) {
+    .settings-column + .settings-column {
+        margin-top: 1.25rem;
+    }
 }
 
 .settings-body .custom-text {

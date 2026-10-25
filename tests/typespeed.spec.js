@@ -1765,6 +1765,85 @@ test.describe('ghost on the same passage', () => {
     });
 });
 
+test.describe('pace caret', () => {
+    const setPace = async (page, pace, wpm) => {
+        await page.locator('#settings-btn').click();
+        await page.locator('#pace-select').selectOption(pace);
+        if (wpm) await page.locator('#pace-wpm').fill(String(wpm));
+        await page.locator('#close-settings-btn').click();
+    };
+
+    test('moves at the target speed and reads vs pace', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+        await page.goto('/');
+        await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
+        await expect(page.locator('#pace-wpm')).toBeHidden();
+        await page.locator('#settings-btn').click();
+        await page.locator('#pace-select').selectOption('target');
+        await expect(page.locator('#pace-wpm')).toBeVisible();
+        await page.locator('#pace-wpm').fill('60');
+        await page.locator('#close-settings-btn').click();
+        await expect(page.locator('#ghost-status')).toHaveText('Pace: 60 WPM');
+
+        const quote = await currentQuote(page);
+        await input(page).press(quote[0]);
+        await page.clock.runFor(11900);
+        expect(await page.evaluate(() => runtime.ghostIndex)).toBe(59);
+        await page.clock.runFor(100);
+        expect(await page.evaluate(() => runtime.ghostIndex)).toBe(60);
+        await expect(page.locator('#ghost-status')).toHaveText('-59 chars vs pace');
+        await expect(page.locator('#ghost-cursor')).toHaveCSS('opacity', '1');
+    });
+
+    test('is saved, and its speed is kept between 10 and 300', async ({ page }) => {
+        await page.goto('/');
+        await setPace(page, 'target', 900);
+        await page.reload();
+        await expect(page.locator('#pace-select')).toHaveValue('target');
+        await expect(page.locator('#pace-wpm')).toHaveValue('300');
+        await expect(page.locator('#ghost-status')).toHaveText('Pace: 300 WPM');
+    });
+
+    test('follows your average or last run at these settings', async ({ page }) => {
+        await page.addInitScript(() => {
+            const run = (wpm) => ({
+                wpm,
+                accuracy: 95,
+                date: 0,
+                mode: 'time',
+                key: 'time:60s:common',
+            });
+            localStorage.setItem('typingGameHistory', JSON.stringify([run(50), run(71)]));
+        });
+        await page.goto('/');
+        await setPace(page, 'average');
+        await expect(page.locator('#ghost-status')).toHaveText('Pace: your average, 61 WPM');
+        await setPace(page, 'last');
+        await expect(page.locator('#ghost-status')).toHaveText('Pace: your last run, 50 WPM');
+
+        await page.locator('#quick-duration .pill', { hasText: '30s' }).click();
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'No runs at these settings yet, so there is no pace caret.'
+        );
+        await expect(page.locator('#ghost-cursor')).toHaveCount(0);
+    });
+
+    test('gives way to Ghost mode', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ isGhostEnabled: true, pace: 'target', paceWpm: 80 })
+            );
+        });
+        await page.goto('/');
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'No ghost yet for these settings: finish a run to record one.'
+        );
+        await input(page).press((await currentQuote(page))[0]);
+        expect(await page.evaluate(() => runtime.ghostTimeouts.length)).toBe(0);
+    });
+});
+
 test.describe('challenge links', () => {
     const recordClipboard = () => {
         navigator.clipboard.writeText = async (text) => {

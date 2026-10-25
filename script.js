@@ -73,6 +73,8 @@ const themeSelector = document.getElementById('theme-selector');
 const soundToggle = document.getElementById('sound-toggle-settings');
 const hardModeToggle = document.getElementById('hard-mode-toggle-settings');
 const ghostModeToggle = document.getElementById('ghost-mode-toggle');
+const paceSelect = document.getElementById('pace-select');
+const paceWpmInput = document.getElementById('pace-wpm');
 const punctuationToggle = document.getElementById('punctuation-toggle');
 const numbersToggle = document.getElementById('numbers-toggle');
 const stopOnErrorToggle = document.getElementById('stop-on-error-toggle');
@@ -163,6 +165,8 @@ const DEFAULT_SETTINGS = {
     wordCount: 10, // words mode
     category: 'common', // 'common', 'weak', or a key of QUOTES (texts.js)
     isGhostEnabled: false,
+    pace: 'off', // pace caret: 'off', 'target', 'average', or 'last'
+    paceWpm: 60, // speed of the pace caret when pace is 'target'
     isHardMode: false,
     isSoundEnabled: true,
     hasPunctuation: false, // common words only
@@ -175,6 +179,9 @@ const DEFAULT_SETTINGS = {
 };
 
 const THEMES = ['system', 'dark', 'light', 'contrast'];
+const PACES = ['off', 'target', 'average', 'last'];
+const PACE_MIN = 10;
+const PACE_MAX = 300;
 
 const CUSTOM_TEXT_LIMIT = 2000;
 
@@ -214,6 +221,10 @@ function sanitizeSettings(saved) {
     if (CATEGORIES.includes(saved.category)) settings.category = saved.category;
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
+    if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    if (Number.isInteger(saved.paceWpm) && saved.paceWpm >= PACE_MIN && saved.paceWpm <= PACE_MAX) {
+        settings.paceWpm = saved.paceWpm;
+    }
     if (typeof saved.customText === 'string') {
         settings.customText = normalizeCustomText(saved.customText);
     }
@@ -589,7 +600,7 @@ function renderNewQuote() {
     quoteDisplayElement.textContent = '';
     quoteTextElement.textContent = runtime.quoteText;
 
-    if (gameState.isGhostEnabled || runtime.challenge) {
+    if (gameState.isGhostEnabled || runtime.challenge || paceSpeed()) {
         const ghostCursor = document.createElement('div');
         ghostCursor.id = 'ghost-cursor';
         ghostCursor.className = 'ghost-cursor';
@@ -816,6 +827,8 @@ function startGame() {
         if (!runtime.textChanged) startGhostPlayback(runtime.challenge.strokes);
     } else if (gameState.isGhostEnabled && best && !runtime.textChanged) {
         startGhostPlayback(bestStrokes(best));
+    } else if (paceSpeed()) {
+        startGhostPlayback(paceStrokes(paceSpeed()));
     }
     updateGhostStatus();
 }
@@ -881,7 +894,7 @@ function placeGhostCursor() {
 function updateGhostStatus() {
     const challenge = runtime.challenge;
     if (!gameState.isGhostEnabled && !challenge) {
-        ghostStatus.classList.add('hidden');
+        updatePaceStatus();
         return;
     }
     ghostStatus.classList.remove('hidden');
@@ -904,9 +917,62 @@ function updateGhostStatus() {
         ghostStatus.textContent = `Racing your best: ${best.wpm} WPM`;
         return;
     }
+    showRaceDelta('ghost');
+}
+
+// How far ahead of or behind the ghost or pace caret you are, in characters.
+function showRaceDelta(name) {
     const delta = runtime.quoteBase + typingInputElement.value.length - runtime.ghostIndex;
-    if (delta === 0) ghostStatus.textContent = 'Level with the ghost';
-    else ghostStatus.textContent = `${delta > 0 ? '+' : ''}${delta} chars vs ghost`;
+    if (delta === 0) setText(ghostStatus, `Level with the ${name}`);
+    else setText(ghostStatus, `${delta > 0 ? '+' : ''}${delta} chars vs ${name}`);
+}
+
+// --- Pace caret ---
+// The pace caret is the ghost cursor fed with strokes at a steady speed.
+// Returns that speed in WPM, or 0 when there is no pace caret: Ghost Mode
+// and challenges take its place, and Average and Last need a recorded run
+// at these settings.
+function paceSpeed() {
+    if (gameState.pace === 'off' || gameState.isGhostEnabled || runtime.challenge) return 0;
+    if (gameState.pace === 'target') return gameState.paceWpm;
+    const runs = runHistory.filter((h) => h.key === settingsKey());
+    if (runs.length === 0) return 0;
+    if (gameState.pace === 'last') return runs[0].wpm;
+    const recent = runs.slice(0, CHART_POINTS);
+    return Math.round(recent.reduce((sum, h) => sum + h.wpm, 0) / recent.length);
+}
+
+// At five characters a word, character i is reached at i * 12000 / wpm ms.
+// Time mode covers the whole duration, Words mode the passage.
+function paceStrokes(wpm) {
+    const count =
+        gameState.mode === 'time'
+            ? Math.ceil((gameState.duration * wpm * 5) / 60)
+            : runtime.quoteText.length;
+    return Array.from({ length: count }, (_, n) => ({ t: ((n + 1) * 12000) / wpm, i: n + 1 }));
+}
+
+function updatePaceStatus() {
+    if (gameState.pace === 'off') {
+        ghostStatus.classList.add('hidden');
+        return;
+    }
+    ghostStatus.classList.remove('hidden');
+    if (runtime.isStarted && runtime.ghostTimeouts.length > 0) {
+        showRaceDelta('pace');
+        return;
+    }
+    const wpm = paceSpeed();
+    if (!wpm) {
+        ghostStatus.textContent = 'No runs at these settings yet, so there is no pace caret.';
+        return;
+    }
+    const labels = {
+        target: `${wpm} WPM`,
+        average: `your average, ${wpm} WPM`,
+        last: `your last run, ${wpm} WPM`,
+    };
+    ghostStatus.textContent = `Pace: ${labels[gameState.pace]}`;
 }
 
 function stopGhostPlayback() {
@@ -1513,6 +1579,9 @@ function applySettingsToUI() {
     soundToggle.checked = gameState.isSoundEnabled;
     hardModeToggle.checked = gameState.isHardMode;
     ghostModeToggle.checked = gameState.isGhostEnabled;
+    paceSelect.value = gameState.pace;
+    paceWpmInput.value = gameState.paceWpm;
+    paceWpmInput.hidden = gameState.pace !== 'target';
     punctuationToggle.checked = gameState.hasPunctuation;
     numbersToggle.checked = gameState.hasNumbers;
     stopOnErrorToggle.checked = gameState.isStopOnError;
@@ -2074,6 +2143,15 @@ function init() {
     });
     ghostModeToggle.addEventListener('change', (e) => {
         gameState.isGhostEnabled = e.target.checked;
+    });
+    paceSelect.addEventListener('change', (e) => {
+        gameState.pace = e.target.value;
+        paceWpmInput.hidden = gameState.pace !== 'target';
+    });
+    paceWpmInput.addEventListener('change', (e) => {
+        const wpm = Math.round(Number(e.target.value));
+        if (Number.isFinite(wpm)) gameState.paceWpm = Math.min(PACE_MAX, Math.max(PACE_MIN, wpm));
+        paceWpmInput.value = gameState.paceWpm;
     });
     stopOnErrorToggle.addEventListener('change', (e) => {
         gameState.isStopOnError = e.target.checked;

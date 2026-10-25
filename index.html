@@ -394,103 +394,139 @@
                 <h2 id="settings-title">Settings</h2>
 
                 <div class="settings-body">
-                    <section class="setting-group" aria-labelledby="rules-heading">
-                        <h3 class="setting-heading" id="rules-heading">Practice rules</h3>
-                        <label class="toggle-label">
-                            <span class="setting-text">
-                                <span class="setting-name" id="stop-on-error-name">
-                                    Stop on error
+                    <div class="settings-column">
+                        <section class="setting-group" aria-labelledby="rules-heading">
+                            <h3 class="setting-heading" id="rules-heading">Practice rules</h3>
+                            <label class="toggle-label">
+                                <span class="setting-text">
+                                    <span class="setting-name" id="stop-on-error-name">
+                                        Stop on error
+                                    </span>
+                                    <span class="setting-desc" id="stop-on-error-desc">
+                                        The caret stays put until you type the right key.
+                                    </span>
                                 </span>
-                                <span class="setting-desc" id="stop-on-error-desc">
-                                    The caret stays put until you type the right key.
+                                <input
+                                    type="checkbox"
+                                    id="stop-on-error-toggle"
+                                    aria-labelledby="stop-on-error-name"
+                                    aria-describedby="stop-on-error-desc"
+                                />
+                                <span class="toggle-custom" aria-hidden="true"></span>
+                            </label>
+                            <label class="toggle-label">
+                                <span class="setting-text">
+                                    <span class="setting-name" id="hard-mode-name">Hard mode</span>
+                                    <span class="setting-desc" id="hard-mode-desc">
+                                        Characters you have typed are blurred.
+                                    </span>
                                 </span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                id="stop-on-error-toggle"
-                                aria-labelledby="stop-on-error-name"
-                                aria-describedby="stop-on-error-desc"
-                            />
-                            <span class="toggle-custom" aria-hidden="true"></span>
-                        </label>
-                        <label class="toggle-label">
-                            <span class="setting-text">
-                                <span class="setting-name" id="hard-mode-name">Hard mode</span>
-                                <span class="setting-desc" id="hard-mode-desc">
-                                    Characters you have typed are blurred.
-                                </span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                id="hard-mode-toggle-settings"
-                                aria-labelledby="hard-mode-name"
-                                aria-describedby="hard-mode-desc"
-                            />
-                            <span class="toggle-custom" aria-hidden="true"></span>
-                        </label>
-                    </section>
+                                <input
+                                    type="checkbox"
+                                    id="hard-mode-toggle-settings"
+                                    aria-labelledby="hard-mode-name"
+                                    aria-describedby="hard-mode-desc"
+                                />
+                                <span class="toggle-custom" aria-hidden="true"></span>
+                            </label>
+                        </section>
 
-                    <section class="setting-group" aria-labelledby="ghost-heading">
-                        <h3 class="setting-heading" id="ghost-heading">Ghost</h3>
-                        <label class="toggle-label">
-                            <span class="setting-text">
-                                <span class="setting-name" id="ghost-mode-name">Ghost mode</span>
-                                <span class="setting-desc" id="ghost-mode-desc">
-                                    A second cursor replays your best run at these settings.
+                        <section class="setting-group" aria-labelledby="ghost-heading">
+                            <h3 class="setting-heading" id="ghost-heading">Ghost and pace</h3>
+                            <label class="toggle-label">
+                                <span class="setting-text">
+                                    <span class="setting-name" id="ghost-mode-name"
+                                        >Ghost mode</span
+                                    >
+                                    <span class="setting-desc" id="ghost-mode-desc">
+                                        A second cursor replays your best run at these settings.
+                                    </span>
                                 </span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                id="ghost-mode-toggle"
-                                aria-labelledby="ghost-mode-name"
-                                aria-describedby="ghost-mode-desc"
-                            />
-                            <span class="toggle-custom" aria-hidden="true"></span>
-                        </label>
-                    </section>
-
-                    <section class="setting-group" aria-labelledby="theme-label">
-                        <h3 class="setting-heading" id="theme-label">Appearance</h3>
-                        <div
-                            class="pill-selector"
-                            id="theme-selector"
-                            role="group"
-                            aria-labelledby="theme-label"
-                        >
-                            <button class="pill active" data-value="system" aria-pressed="true">
-                                System
-                            </button>
-                            <button class="pill" data-value="dark" aria-pressed="false">
-                                Dark
-                            </button>
-                            <button class="pill" data-value="light" aria-pressed="false">
-                                Light
-                            </button>
-                            <button class="pill" data-value="contrast" aria-pressed="false">
-                                Contrast
-                            </button>
-                        </div>
-                    </section>
-
-                    <section class="setting-group" aria-labelledby="sound-heading">
-                        <h3 class="setting-heading" id="sound-heading">Sound</h3>
-                        <label class="toggle-label">
-                            <span class="setting-text">
-                                <span class="setting-name" id="sound-name">Sound effects</span>
-                                <span class="setting-desc" id="sound-desc">
-                                    A click per key, a buzz on mistakes, a chime at the end.
+                                <input
+                                    type="checkbox"
+                                    id="ghost-mode-toggle"
+                                    aria-labelledby="ghost-mode-name"
+                                    aria-describedby="ghost-mode-desc"
+                                />
+                                <span class="toggle-custom" aria-hidden="true"></span>
+                            </label>
+                            <div class="setting-row">
+                                <span class="setting-text">
+                                    <label class="setting-name" id="pace-name" for="pace-select">
+                                        Pace caret
+                                    </label>
+                                    <span class="setting-desc" id="pace-desc">
+                                        A second cursor at a steady speed, when Ghost mode is off.
+                                    </span>
                                 </span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                id="sound-toggle-settings"
-                                aria-labelledby="sound-name"
-                                aria-describedby="sound-desc"
-                                checked
-                            />
-                            <span class="toggle-custom" aria-hidden="true"></span>
-                        </label>
-                    </section>
+                                <span class="setting-controls">
+                                    <select
+                                        id="pace-select"
+                                        class="category-select"
+                                        aria-describedby="pace-desc"
+                                    >
+                                        <option value="off">Off</option>
+                                        <option value="target">Target speed</option>
+                                        <option value="average">Your average</option>
+                                        <option value="last">Your last run</option>
+                                    </select>
+                                    <input
+                                        type="number"
+                                        id="pace-wpm"
+                                        class="number-input"
+                                        min="10"
+                                        max="300"
+                                        step="1"
+                                        aria-label="Target WPM"
+                                    />
+                                </span>
+                            </div>
+                        </section>
+                    </div>
+                    <div class="settings-column">
+                        <section class="setting-group" aria-labelledby="theme-label">
+                            <h3 class="setting-heading" id="theme-label">Appearance</h3>
+                            <div
+                                class="pill-selector"
+                                id="theme-selector"
+                                role="group"
+                                aria-labelledby="theme-label"
+                            >
+                                <button class="pill active" data-value="system" aria-pressed="true">
+                                    System
+                                </button>
+                                <button class="pill" data-value="dark" aria-pressed="false">
+                                    Dark
+                                </button>
+                                <button class="pill" data-value="light" aria-pressed="false">
+                                    Light
+                                </button>
+                                <button class="pill" data-value="contrast" aria-pressed="false">
+                                    Contrast
+                                </button>
+                            </div>
+                        </section>
+
+                        <section class="setting-group" aria-labelledby="sound-heading">
+                            <h3 class="setting-heading" id="sound-heading">Sound</h3>
+                            <label class="toggle-label">
+                                <span class="setting-text">
+                                    <span class="setting-name" id="sound-name">Sound effects</span>
+                                    <span class="setting-desc" id="sound-desc">
+                                        A click per key, a buzz on mistakes, a chime at the end.
+                                    </span>
+                                </span>
+                                <input
+                                    type="checkbox"
+                                    id="sound-toggle-settings"
+                                    aria-labelledby="sound-name"
+                                    aria-describedby="sound-desc"
+                                    checked
+                                />
+                                <span class="toggle-custom" aria-hidden="true"></span>
+                            </label>
+                        </section>
+                    </div>
                 </div>
 
                 <div class="modal-actions settings-footer">
