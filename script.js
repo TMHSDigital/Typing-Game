@@ -1902,6 +1902,9 @@ function init() {
             gameState[flag] = e.target.checked;
             saveSettings();
             resetGame();
+            // WebKit focuses the checkbox after its change event, which would
+            // leave typing going to the checkbox.
+            requestAnimationFrame(() => typingInputElement.focus());
         });
     }
     codeLanguageSelect.addEventListener('change', (e) => {
