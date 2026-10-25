@@ -227,7 +227,7 @@ select:focus-visible,
 
 header {
     text-align: center;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -276,59 +276,53 @@ header h1 .accent {
     pointer-events: none; /* Clicks land on the button, not the icon */
 }
 
-/* Stats HUD */
+/* Stats line above the passage: clock and WPM in the passage's font on the
+   left, the rest small on the right. */
 .stats {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 1rem;
-    margin-bottom: 2.5rem;
-    padding: 1rem;
-    background: var(--surface-sunken);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-}
-
-.stat-item {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 0.5rem;
-    transition: transform 0.2s;
-}
-
-.stat-item.primary {
-    background: var(--glass-highlight);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--tint-1);
-}
-
-.stat-item.highlight .value {
-    color: var(--accent-secondary);
-}
-
-.stat-item .label {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-}
-
-.stat-item .value {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem 1.5rem;
+    margin-bottom: 0.75rem;
     font-family: var(--font-code);
-    font-size: 1.75rem;
+}
+
+.stats-main,
+.stats-side {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+}
+
+.stats-main {
+    font-size: 1.5rem;
+}
+
+.stats-side {
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.stats-main .value {
     font-weight: 700;
     color: var(--text-main);
-    line-height: 1;
 }
 
-.stat-item .unit {
-    font-size: 0.75rem;
+.stats-main .label {
+    font-size: 0.85rem;
     color: var(--text-muted);
-    margin-left: 2px;
-    font-weight: 400;
+}
+
+.stat-timer .value,
+.stat-timer .unit {
+    color: var(--accent-secondary);
+    font-weight: 700;
+}
+
+.stats-side .value {
+    color: var(--text-main);
 }
 
 /* Controls & Toggle */
@@ -388,14 +382,15 @@ header h1 .accent {
     outline-offset: 2px;
 }
 
+/* Sized and colored like the compact pills beside it */
 .category-select {
-    background: var(--select-bg);
-    color: var(--text-strong);
+    background: var(--sunken-2);
+    color: var(--text-main);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
-    padding: 0.5rem 1rem;
+    padding: 0.35rem 0.6rem;
     font-family: var(--font-ui);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     cursor: pointer;
     outline: none;
     transition:
@@ -711,19 +706,27 @@ input:checked + .toggle-custom::after {
     transform: rotate(180deg);
 }
 
+.key-hint {
+    font-family: var(--font-code);
+    font-size: 0.75rem;
+    font-weight: 400;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 4px;
+}
+
+/* Touch screens usually have no Tab key. */
+@media (pointer: coarse) {
+    .key-hint {
+        display: none;
+    }
+}
+
 footer {
     margin-top: 2rem;
     text-align: center;
     font-size: 0.75rem;
     color: var(--text-ghost);
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-}
-
-.footer-note {
-    margin-top: 0.5rem;
-    text-transform: none;
-    letter-spacing: normal;
 }
 
 .footer-note a {
@@ -735,10 +738,6 @@ footer {
     .container {
         padding: 1.5rem;
         margin: 1rem;
-    }
-
-    .stats {
-        grid-template-columns: repeat(3, 1fr);
     }
 
     header h1 {
@@ -762,7 +761,7 @@ footer {
 
 /* Focus Mode Effects */
 .container.focus-mode header,
-.container.focus-mode .stats,
+.container.focus-mode .stats-side,
 .container.focus-mode .controls,
 .container.focus-mode footer {
     opacity: 0.3;

@@ -98,31 +98,6 @@
             </header>
 
             <div class="game-area">
-                <div id="stats-bar" class="stats">
-                    <div class="stat-item">
-                        <span class="label">Time</span>
-                        <span id="timer" class="value">60</span>
-                        <span class="unit">s</span>
-                    </div>
-                    <div class="stat-item primary">
-                        <span class="label">WPM</span>
-                        <span id="wpm" class="value">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="label">Accuracy</span>
-                        <span id="accuracy" class="value">100</span>
-                        <span class="unit">%</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="label">Mistakes</span>
-                        <span id="mistakes" class="value">0</span>
-                    </div>
-                    <div class="stat-item highlight">
-                        <span class="label">Best</span>
-                        <span id="high-score" class="value">0</span>
-                    </div>
-                </div>
-
                 <div class="controls">
                     <div class="control-group left">
                         <label for="category-select" class="visually-hidden">Text category</label>
@@ -213,6 +188,33 @@
                     </div>
                 </div>
 
+                <div id="stats-bar" class="stats">
+                    <div class="stats-main">
+                        <span class="stat-item stat-timer">
+                            <span class="visually-hidden">Time</span>
+                            <span id="timer" class="value">60</span><span class="unit">s</span>
+                        </span>
+                        <span class="stat-item">
+                            <span id="wpm" class="value">0</span>
+                            <span class="label">WPM</span>
+                        </span>
+                    </div>
+                    <div class="stats-side">
+                        <span class="stat-item">
+                            <span id="accuracy" class="value">100</span><span class="unit">%</span>
+                            <span class="label">accuracy</span>
+                        </span>
+                        <span class="stat-item">
+                            <span id="mistakes" class="value">0</span>
+                            <span class="label">mistakes</span>
+                        </span>
+                        <span class="stat-item">
+                            <span class="label">best</span>
+                            <span id="high-score" class="value">0</span>
+                        </span>
+                    </div>
+                </div>
+
                 <div class="typing-container">
                     <p id="ghost-status" class="ghost-status hidden"></p>
                     <p id="caps-warning" class="caps-warning hidden" role="status">
@@ -235,7 +237,7 @@
                     ></textarea>
                 </div>
 
-                <button id="reset-button" class="reset-btn" title="Press Tab to restart">
+                <button id="reset-button" class="reset-btn">
                     <svg
                         width="16"
                         height="16"
@@ -251,11 +253,11 @@
                         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                     </svg>
                     Restart
+                    <kbd class="key-hint">Tab</kbd>
                 </button>
             </div>
 
             <footer>
-                <p>tab to restart</p>
                 <p class="footer-note">
                     No account. Your results are stored only in this browser.
                     <a href="https://github.com/TMHSDigital/Typing-Game#privacy">Privacy</a>

@@ -63,6 +63,21 @@ test.describe('loading', () => {
         expect(errors).toEqual([]);
     });
 
+    test('the stats line sits above the passage, sharing its left edge', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.goto('/');
+        const stats = await page.locator('#stats-bar').boundingBox();
+        const passage = await page.locator('#quote-display').boundingBox();
+        expect(passage.y).toBeLessThan(450);
+        expect(stats.y + stats.height).toBeLessThanOrEqual(passage.y);
+        expect(Math.abs(stats.x - passage.x)).toBeLessThan(1);
+        // Units sit on the same line as their numbers.
+        const timer = await page.locator('#timer').boundingBox();
+        const unit = await page.locator('.stat-timer .unit').boundingBox();
+        expect(Math.abs(unit.y - timer.y)).toBeLessThan(4);
+        await expect(page.locator('#reset-button .key-hint')).toHaveText('Tab');
+    });
+
     test('says there is no account and data stays in this browser', async ({ page }) => {
         await page.goto('/');
         await expect(page.locator('footer')).toContainText(
