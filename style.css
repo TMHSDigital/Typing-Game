@@ -411,7 +411,8 @@ header h1 .accent {
     border-color: var(--text-muted);
 }
 
-.option-check:has(input:checked) {
+.option-check:has(input:checked),
+.option-btn[aria-pressed='true'] {
     color: var(--text-main);
     border-color: var(--accent-primary);
 }

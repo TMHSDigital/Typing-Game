@@ -4,7 +4,7 @@
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
-   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash */
+   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -1841,6 +1841,136 @@ test.describe('pace caret', () => {
         );
         await input(page).press((await currentQuote(page))[0]);
         expect(await page.evaluate(() => runtime.ghostTimeouts.length)).toBe(0);
+    });
+});
+
+test.describe('daily', () => {
+    const openDaily = async (page, time) => {
+        await page.clock.install({ time: new Date(time) });
+        await page.goto('/');
+        await page.clock.pauseAt(new Date(new Date(time).getTime() + 10000));
+        await page.locator('#daily-btn').click();
+        return currentQuote(page);
+    };
+
+    test('everyone gets the same passage on the same UTC date, and a new one the next day', async ({
+        browser,
+    }) => {
+        const quoteOn = async (time) => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            const quote = await openDaily(page, time);
+            await expect(page.locator('#ghost-status')).toContainText('Daily #');
+            const number = (await page.locator('#ghost-status').textContent()).match(/#(\d+)/)[1];
+            await context.close();
+            return [quote, number];
+        };
+        const morning = await quoteOn('2026-10-26T01:00:00Z');
+        const evening = await quoteOn('2026-10-26T22:00:00Z');
+        const nextDay = await quoteOn('2026-10-27T01:00:00Z');
+        expect(morning).toEqual(evening);
+        expect(morning[1]).toBe('2');
+        expect(nextDay[1]).toBe('3');
+        expect(nextDay[0]).not.toBe(morning[0]);
+    });
+
+    test('uses fixed settings and gives the saved ones back after the run', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', wordCount: 25, category: 'general' })
+            );
+        });
+        const quote = await openDaily(page, '2026-10-25T12:00:00Z');
+        await expect(page.locator('#daily-btn')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#quick-duration .pill.active')).toHaveText('30s');
+        await expect(page.locator('#category-select')).toHaveValue('common');
+        await expect(page.locator('#punctuation-toggle')).toBeChecked();
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'Daily #1: the same passage for everyone today. Your first run is the one recorded.'
+        );
+
+        await input(page).pressSequentially(quote.slice(0, 5));
+        await page.clock.runFor(31000);
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        await page.locator('#play-again-btn').click();
+        await expect(page.locator('#daily-btn')).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('#category-select')).toHaveValue('general');
+        await expect(page.locator('#quick-word-count .pill.active')).toHaveText('25');
+    });
+
+    test('records the first run of the day and shares it as a line and a grid', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            navigator.clipboard.writeText = async (text) => {
+                window.copiedText = text;
+            };
+        });
+        const quote = await openDaily(page, '2026-10-25T12:00:00Z');
+        // All typed in the first five seconds: one green square, then white.
+        await input(page).pressSequentially(quote.slice(0, 20));
+        await page.clock.runFor(31000);
+        await expect(page.locator('#modal-challenge')).toHaveText(
+            'Daily #1 recorded: \u{1f7e9}⬜⬜⬜⬜⬜'
+        );
+        const wpm = await page.locator('#modal-wpm').textContent();
+        await page.locator('#share-btn').click();
+        expect(await page.evaluate(() => window.copiedText)).toBe(
+            `TypeSpeed Daily #1: ${wpm} WPM, 100%\n\u{1f7e9}⬜⬜⬜⬜⬜\nhttps://tmhsdigital.github.io/Typing-Game/#daily`
+        );
+        const stored = await page.evaluate(() =>
+            JSON.parse(localStorage.getItem('typingGameDaily'))
+        );
+        expect(stored).toEqual({
+            1: { wpm: Number(wpm), accuracy: 100, grid: '\u{1f7e9}⬜⬜⬜⬜⬜' },
+        });
+
+        // A second attempt is practice: not recorded, and sharing still sends the first.
+        await page.locator('#play-again-btn').click();
+        await page.locator('#daily-btn').click();
+        await expect(page.locator('#ghost-status')).toHaveText(
+            `Daily #1: already played today at ${wpm} WPM. This run is practice.`
+        );
+        await input(page).pressSequentially(quote.slice(0, 3));
+        await input(page).press(quote[3] === 'x' ? 'y' : 'x');
+        await page.clock.runFor(31000);
+        await expect(page.locator('#modal-challenge')).toHaveText(
+            `Daily #1 was already played today at ${wpm} WPM, so this run was practice.`
+        );
+        await page.locator('#share-btn').click();
+        expect(await page.evaluate(() => window.copiedText)).toContain(
+            `TypeSpeed Daily #1: ${wpm} WPM, 100%`
+        );
+        expect(
+            await page.evaluate(() => JSON.parse(localStorage.getItem('typingGameDaily')))
+        ).toEqual(stored);
+    });
+
+    test('#daily in the URL opens it, and the button leaves it', async ({ page }) => {
+        await page.goto('/#daily');
+        await expect(page.locator('#daily-btn')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#ghost-status')).toContainText('Daily #');
+        await page.locator('#daily-btn').click();
+        await expect(page.locator('#daily-btn')).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('#ghost-status')).toBeHidden();
+        await expect(page.locator('#quick-duration .pill.active')).toHaveText('60s');
+        expect(await page.evaluate(() => location.hash)).toBe('');
+    });
+
+    test('import keeps only well-formed daily results', async ({ page }) => {
+        await page.goto('/');
+        const result = await page.evaluate(() =>
+            validDaily({
+                1: { wpm: 80, accuracy: 97, grid: '\u{1f7e9}\u{1f7e8}\u{1f7e5}⬜' },
+                2: { wpm: 80, accuracy: 97, grid: '<img>' },
+                abc: { wpm: 80, accuracy: 97, grid: '' },
+                3: { wpm: '80', accuracy: 97, grid: '' },
+            })
+        );
+        expect(result).toEqual({
+            1: { wpm: 80, accuracy: 97, grid: '\u{1f7e9}\u{1f7e8}\u{1f7e5}⬜' },
+        });
     });
 });
 

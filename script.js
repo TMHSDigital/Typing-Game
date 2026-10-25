@@ -37,6 +37,7 @@ const practiceBtn = document.getElementById('practice-btn');
 const practiceNote = document.getElementById('practice-note');
 const challengeBtn = document.getElementById('challenge-btn');
 const modalChallengeElement = document.getElementById('modal-challenge');
+const dailyBtn = document.getElementById('daily-btn');
 const challengeLinkRow = document.getElementById('challenge-link-row');
 const challengeLinkInput = document.getElementById('challenge-link');
 const shareBtn = document.getElementById('share-btn');
@@ -105,6 +106,7 @@ const STORAGE_KEYS = {
     bests: 'typingGameBests',
     settings: 'typingGameSettings',
     keyStats: 'typingGameKeyStats',
+    daily: 'typingGameDaily',
 };
 
 function loadJSON(key, fallback) {
@@ -292,6 +294,7 @@ const runtime = {
     challenge: null, // decoded challenge link, kept across resets until a run uses it
     indent: [], // per character of quoteText: true for indentation Skip indentation fills in
     ghostTimeouts: [],
+    grid: [], // {typed, wrong} per GRID_SECONDS of the run, for the daily's share grid
     challengeUrl: '', // link for the finished run, built when the result dialog opens
 };
 
@@ -309,6 +312,12 @@ if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
 // Attempts and misses per expected character across all recorded runs.
 let keyStats = loadJSON(STORAGE_KEYS.keyStats, {});
 if (!keyStats || typeof keyStats !== 'object' || Array.isArray(keyStats)) keyStats = {};
+
+// The first recorded result of each daily: { [day number]: { wpm, accuracy, grid } }.
+let dailyResults = loadJSON(STORAGE_KEYS.daily, {});
+if (!dailyResults || typeof dailyResults !== 'object' || Array.isArray(dailyResults)) {
+    dailyResults = {};
+}
 
 // Keys missed most often, by miss rate, among keys tried at least
 // WEAK_MIN_ATTEMPTS times: letters (lowercased), digits, and symbols, but not
@@ -620,7 +629,8 @@ function renderNewQuote() {
     quoteDisplayElement.textContent = '';
     quoteTextElement.textContent = runtime.quoteText;
 
-    if (gameState.isGhostEnabled || runtime.challenge || paceSpeed()) {
+    const challengeGhost = runtime.challenge && !runtime.challenge.daily;
+    if (gameState.isGhostEnabled || challengeGhost || paceSpeed()) {
         const ghostCursor = document.createElement('div');
         ghostCursor.id = 'ghost-cursor';
         ghostCursor.className = 'ghost-cursor';
@@ -715,18 +725,22 @@ function handleInput() {
     }
     const inserted = typed.slice(unchanged);
     if (inserted.length > 0) {
+        const slot = Math.floor(elapsedMs() / (GRID_SECONDS * 1000));
+        runtime.grid[slot] = runtime.grid[slot] || { typed: 0, wrong: 0 };
         let wrong = 0;
         let firstWrong = -1;
         for (let k = 0; k < inserted.length; k++) {
             const pos = unchanged + k;
             if (pos >= quote.length) continue;
             runtime.keystrokes++;
+            runtime.grid[slot].typed++;
             const expected = quote[pos];
             const stat = runtime.keyStats[expected] || { attempts: 0, misses: 0 };
             runtime.keyStats[expected] = stat;
             stat.attempts++;
             if (inserted[k] !== expected) {
                 stat.misses++;
+                runtime.grid[slot].wrong++;
                 wrong++;
                 if (firstWrong === -1) firstWrong = pos;
             }
@@ -913,6 +927,10 @@ function placeGhostCursor() {
 // the ghost you are, in characters.
 function updateGhostStatus() {
     const challenge = runtime.challenge;
+    if (challenge && challenge.daily) {
+        updateDailyStatus();
+        return;
+    }
     if (!gameState.isGhostEnabled && !challenge) {
         updatePaceStatus();
         return;
@@ -1055,6 +1073,17 @@ function endGame(endTime = performance.now()) {
         }
         saveJSON(STORAGE_KEYS.keyStats, keyStats);
 
+        // Only the first daily run of the day is the day's result.
+        const daily = runtime.challenge && runtime.challenge.daily;
+        if (daily && !dailyResults[daily]) {
+            dailyResults[daily] = { wpm, accuracy, grid: dailyGrid() };
+            for (const day of Object.keys(dailyResults)) {
+                if (Number(day) <= daily - DAILY_LIMIT) delete dailyResults[day];
+            }
+            saveJSON(STORAGE_KEYS.daily, dailyResults);
+            runtime.challenge.recorded = true;
+        }
+
         if (wpm > (previousBest ? previousBest.wpm : 0)) {
             bests[key] = {
                 wpm,
@@ -1182,6 +1211,7 @@ function resetGame() {
         ghostIndex: 0,
         challengeUrl: '',
         textChanged: false,
+        grid: [],
     });
 
     // A challenge on changed text is still played, without a ghost or
@@ -1228,6 +1258,7 @@ function updateQuickBar() {
     punctuationOption.classList.toggle('hidden', gameState.category !== 'common');
     numbersOption.classList.toggle('hidden', gameState.category !== 'common');
     editCustomBtn.classList.toggle('hidden', gameState.category !== 'custom');
+    dailyBtn.setAttribute('aria-pressed', String(Boolean(runtime.challenge?.daily)));
 
     const weak = runtime.weakKeys;
     const noCustomText = gameState.category === 'custom' && !gameState.customText;
@@ -1307,7 +1338,16 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
 
     const challenge = runtime.challenge;
     modalChallengeElement.classList.toggle('hidden', !challenge);
-    if (challenge) {
+    if (challenge && challenge.daily) {
+        const result = dailyResults[challenge.daily];
+        if (challenge.recorded) {
+            modalChallengeElement.textContent = `Daily #${challenge.daily} recorded: ${result.grid}`;
+        } else if (result) {
+            modalChallengeElement.textContent = `Daily #${challenge.daily} was already played today at ${result.wpm} WPM, so this run was practice.`;
+        } else {
+            modalChallengeElement.textContent = `Daily #${challenge.daily} not recorded: runs under one second are not recorded.`;
+        }
+    } else if (challenge) {
         const verdict =
             wpm > challenge.wpm ? 'You won.' : wpm === challenge.wpm ? 'A tie.' : 'They won.';
         const outcome = runtime.textChanged
@@ -1332,25 +1372,39 @@ function settingsLabel(separator = ' ') {
     return `${length}${separator}${category}`;
 }
 
-function shareText() {
-    return `${modalWpmElement.textContent} WPM, ${modalAccuracyElement.textContent} accuracy, ${settingsLabel()} on TypeSpeed`;
+// A daily shares the day's recorded result, even after a practice run.
+function shareContent() {
+    const daily = runtime.challenge && runtime.challenge.daily;
+    const result = daily && dailyResults[daily];
+    if (result) {
+        return {
+            text: `TypeSpeed Daily #${daily}: ${result.wpm} WPM, ${result.accuracy}%\n${result.grid}`,
+            url: `${SITE_URL}#daily`,
+            separator: '\n',
+        };
+    }
+    return {
+        text: `${modalWpmElement.textContent} WPM, ${modalAccuracyElement.textContent} accuracy, ${settingsLabel()} on TypeSpeed`,
+        url: SITE_URL,
+        separator: ' ',
+    };
 }
 
 // Phones get the system share sheet. Desktops, where navigator.share opens
 // an OS dialog people do not expect, copy to the clipboard.
 async function shareResult() {
-    const text = shareText();
+    const { text, url, separator } = shareContent();
     const touch = window.matchMedia('(pointer: coarse)').matches;
     if (touch && navigator.share) {
         try {
-            await navigator.share({ title: 'TypeSpeed', text, url: SITE_URL });
+            await navigator.share({ title: 'TypeSpeed', text, url });
         } catch {
             // Dismissing the share sheet rejects; nothing to report.
         }
         return;
     }
     try {
-        await navigator.clipboard.writeText(`${text} ${SITE_URL}`);
+        await navigator.clipboard.writeText(`${text}${separator}${url}`);
         shareBtn.textContent = 'Copied!';
     } catch {
         shareBtn.textContent = 'Copy failed';
@@ -1547,6 +1601,10 @@ function clearChallengeHash() {
 }
 
 async function loadChallengeFromHash() {
+    if (location.hash === '#daily') {
+        startDaily();
+        return;
+    }
     const match = location.hash.match(/^#c=([A-Za-z0-9_-]+)$/);
     if (!match || match[1].length > CHALLENGE_MAX_LENGTH) return;
     let challenge;
@@ -1571,6 +1629,88 @@ function endChallenge() {
     Object.assign(gameState, sanitizeSettings(loadJSON(STORAGE_KEYS.settings, null)));
     applySettingsToUI();
     clearChallengeHash();
+}
+
+// --- Daily ---
+// One passage a day, the same for everyone: fixed settings, and a seed from
+// the UTC date. It is played like a challenge without a ghost, so the
+// player's saved settings come back after the run.
+const DAILY_SETTINGS = {
+    mode: 'time',
+    duration: 30,
+    category: 'common',
+    hasPunctuation: true,
+    hasNumbers: false,
+    isStopOnError: false,
+};
+const DAY_MS = 86400000;
+const DAILY_FIRST_DAY = Date.UTC(2026, 9, 25) / DAY_MS; // Daily #1
+const DAILY_LIMIT = 400; // days of results kept
+const GRID_SECONDS = 5; // one square of the share grid
+
+const dailyNumber = (now = Date.now()) => Math.floor(now / DAY_MS) - DAILY_FIRST_DAY + 1;
+
+// The seed is the hash of 'daily-' and the day's UTC date, as YYYY-MM-DD.
+function dailySeed(number) {
+    const date = new Date((DAILY_FIRST_DAY + number - 1) * DAY_MS).toISOString().slice(0, 10);
+    return parseInt(textHash(`daily-${date}`), 36);
+}
+
+function startDaily() {
+    const number = dailyNumber();
+    runtime.challenge = {
+        settings: { ...DAILY_SETTINGS },
+        seed: dailySeed(number),
+        daily: number,
+        wpm: 0,
+        weakKeys: [],
+        strokes: [],
+        used: false,
+    };
+    Object.assign(gameState, DAILY_SETTINGS);
+    applySettingsToUI();
+    resetGame();
+}
+
+// The Daily button starts today's daily, or while it is open, leaves it.
+function toggleDaily() {
+    if (runtime.challenge && runtime.challenge.daily) {
+        endChallenge();
+        resetGame();
+    } else {
+        startDaily();
+    }
+}
+
+function updateDailyStatus() {
+    const number = runtime.challenge.daily;
+    const result = dailyResults[number];
+    ghostStatus.classList.remove('hidden');
+    setText(
+        ghostStatus,
+        result
+            ? `Daily #${number}: already played today at ${result.wpm} WPM. This run is practice.`
+            : `Daily #${number}: the same passage for everyone today. Your first run is the one recorded.`
+    );
+}
+
+// One square per GRID_SECONDS: green at 95% accuracy or more, yellow at
+// 85% or more, red below, white when nothing was typed.
+function dailyGrid() {
+    const slots = Math.ceil(
+        Math.min(elapsedMs(), DAILY_SETTINGS.duration * 1000) / (GRID_SECONDS * 1000)
+    );
+    let grid = '';
+    for (let slot = 0; slot < slots; slot++) {
+        const cell = runtime.grid[slot];
+        if (!cell || cell.typed === 0) {
+            grid += '\u2b1c';
+            continue;
+        }
+        const accuracy = (cell.typed - cell.wrong) / cell.typed;
+        grid += accuracy >= 0.95 ? '\u{1f7e9}' : accuracy >= 0.85 ? '\u{1f7e8}' : '\u{1f7e5}';
+    }
+    return grid;
 }
 
 // --- Settings ---
@@ -1890,6 +2030,7 @@ function exportData() {
         [STORAGE_KEYS.history]: runHistory,
         [STORAGE_KEYS.bests]: bests,
         [STORAGE_KEYS.keyStats]: keyStats,
+        [STORAGE_KEYS.daily]: dailyResults,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
@@ -1941,6 +2082,21 @@ function validBests(map) {
     return result;
 }
 
+const DAILY_GRID = /^(\u2b1c|\u{1f7e9}|\u{1f7e8}|\u{1f7e5}){0,12}$/u;
+
+function validDaily(map) {
+    const result = {};
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return result;
+    for (const [day, run] of Object.entries(map)) {
+        if (!/^[1-9]\d{0,5}$/.test(day) || !run || !isNumber(run.wpm)) continue;
+        if (!isNumber(run.accuracy) || typeof run.grid !== 'string' || !DAILY_GRID.test(run.grid)) {
+            continue;
+        }
+        result[day] = { wpm: run.wpm, accuracy: run.accuracy, grid: run.grid };
+    }
+    return result;
+}
+
 function validKeyStats(map) {
     const result = {};
     if (!map || typeof map !== 'object' || Array.isArray(map)) return result;
@@ -1976,10 +2132,12 @@ async function importData(file) {
     runHistory = validHistory(data[STORAGE_KEYS.history]);
     bests = validBests(data[STORAGE_KEYS.bests]);
     keyStats = validKeyStats(data[STORAGE_KEYS.keyStats]);
+    dailyResults = validDaily(data[STORAGE_KEYS.daily]);
     Object.assign(gameState, sanitizeSettings(data[STORAGE_KEYS.settings]));
     saveJSON(STORAGE_KEYS.history, runHistory);
     saveJSON(STORAGE_KEYS.bests, bests);
     saveJSON(STORAGE_KEYS.keyStats, keyStats);
+    saveJSON(STORAGE_KEYS.daily, dailyResults);
     saveSettings();
     applySettingsToUI();
     updateHighScoreDisplay();
@@ -1991,13 +2149,20 @@ async function importData(file) {
 function clearData() {
     if (clearBtn.textContent !== 'Click again to clear') {
         clearBtn.textContent = 'Click again to clear';
-        statsStatus.textContent = 'This removes run history, best scores, and key stats.';
+        statsStatus.textContent =
+            'This removes run history, best scores, key stats, and daily results.';
         return;
     }
     runHistory = [];
     bests = {};
     keyStats = {};
-    for (const key of [STORAGE_KEYS.history, STORAGE_KEYS.bests, STORAGE_KEYS.keyStats]) {
+    dailyResults = {};
+    for (const key of [
+        STORAGE_KEYS.history,
+        STORAGE_KEYS.bests,
+        STORAGE_KEYS.keyStats,
+        STORAGE_KEYS.daily,
+    ]) {
         try {
             localStorage.removeItem(key);
         } catch {
@@ -2232,6 +2397,7 @@ function init() {
     });
 
     challengeBtn.addEventListener('click', copyChallengeLink);
+    dailyBtn.addEventListener('click', toggleDaily);
 
     document.addEventListener('keydown', handleKeydown);
     // A link opened in a tab that already has the page only changes the
