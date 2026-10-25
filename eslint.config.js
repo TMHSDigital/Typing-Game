@@ -17,6 +17,7 @@ module.exports = [
                 COMMON_WORDS: 'readonly',
                 QUOTES: 'readonly',
                 CODE_SNIPPETS: 'readonly',
+                LESSON_HOME_WORDS: 'readonly',
             },
         },
         rules: {

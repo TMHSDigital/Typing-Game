@@ -49,6 +49,7 @@ const closeReplayBtn = document.getElementById('close-replay-btn');
 const practiceNote = document.getElementById('practice-note');
 const challengeBtn = document.getElementById('challenge-btn');
 const modalChallengeElement = document.getElementById('modal-challenge');
+const modalLessonElement = document.getElementById('modal-lesson');
 const dailyBtn = document.getElementById('daily-btn');
 const challengeLinkRow = document.getElementById('challenge-link-row');
 const challengeLinkInput = document.getElementById('challenge-link');
@@ -112,6 +113,7 @@ const punctuationOption = document.getElementById('punctuation-option');
 const numbersOption = document.getElementById('numbers-option');
 const autoIndentOption = document.getElementById('auto-indent-option');
 const codeLanguageSelect = document.getElementById('code-language-select');
+const lessonSelect = document.getElementById('lesson-select');
 const capsWarning = document.getElementById('caps-warning');
 const ghostStatus = document.getElementById('ghost-status');
 
@@ -129,6 +131,7 @@ const STORAGE_KEYS = {
     settings: 'typingGameSettings',
     keyStats: 'typingGameKeyStats',
     daily: 'typingGameDaily',
+    lessons: 'typingGameLessons',
 };
 
 function loadJSON(key, fallback) {
@@ -212,10 +215,25 @@ const DEFAULT_SETTINGS = {
     lineSpacing: 'normal',
     caretStyle: 'underline',
     lastSeenVersion: '', // VERSION when the page was last opened
+    lessonStage: 1, // stage number in the Lessons category, from 1
 };
 
 const THEMES = ['system', 'dark', 'light', 'contrast'];
 const PACES = ['off', 'target', 'average', 'last'];
+
+// --- Lessons ---
+// Stages for learning to touch type. Each adds keys to the ones before it.
+// A run passes a stage at LESSON_PASS accuracy and WPM and unlocks the next.
+const ALL_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+const LESSON_STAGES = [
+    { name: 'Home row', letters: 'asdfghjkl' },
+    { name: 'Top row', letters: 'asdfghjklqwertyuiop' },
+    { name: 'Bottom row', letters: ALL_LETTERS },
+    { name: 'Capitals', letters: ALL_LETTERS, capitals: true },
+    { name: 'Punctuation', letters: ALL_LETTERS, punctuation: true },
+    { name: 'Numbers', letters: ALL_LETTERS, punctuation: true, numbers: true },
+];
+const LESSON_PASS = { accuracy: 95, wpm: 20 };
 
 // --- Layouts ---
 // Each layout as the characters on the physical keys of a US keyboard, row
@@ -274,7 +292,7 @@ function textHash(text) {
     return hash.toString(36);
 }
 
-const CATEGORIES = ['common', 'weak', 'custom', 'code', ...Object.keys(QUOTES)];
+const CATEGORIES = ['common', 'weak', 'lessons', 'custom', 'code', ...Object.keys(QUOTES)];
 const OWN_CODE = 'own';
 const CODE_LANGUAGES = [...Object.keys(CODE_SNIPPETS), OWN_CODE];
 const OWN_CODE_LIMIT = 20000; // characters
@@ -342,6 +360,9 @@ function sanitizeSettings(saved) {
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    if (Number.isInteger(saved.lessonStage) && LESSON_STAGES[saved.lessonStage - 1]) {
+        settings.lessonStage = saved.lessonStage;
+    }
     if (Object.hasOwn(LAYOUTS, saved.layout)) settings.layout = saved.layout;
     if (
         typeof saved.lastSeenVersion === 'string' &&
@@ -426,6 +447,9 @@ if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
 let keyStats = loadJSON(STORAGE_KEYS.keyStats, {});
 if (!keyStats || typeof keyStats !== 'object' || Array.isArray(keyStats)) keyStats = {};
 
+// The highest lesson stage unlocked: { unlocked }.
+let lessonProgress = validLessons(loadJSON(STORAGE_KEYS.lessons, null));
+
 // The first recorded result of each daily: { [day number]: { wpm, accuracy, grid } }.
 let dailyResults = loadJSON(STORAGE_KEYS.daily, {});
 if (!dailyResults || typeof dailyResults !== 'object' || Array.isArray(dailyResults)) {
@@ -476,6 +500,7 @@ function settingsKey() {
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
     let category = passageCategory();
     if (category === 'custom') category = `custom-${textHash(gameState.customText)}`;
+    if (category === 'lessons') category = `lessons-${gameState.lessonStage}`;
     if (category === 'code') {
         const language = codeLanguage();
         category =
@@ -772,6 +797,48 @@ function commonWords(
 
 // Common words that contain at least one of the given letters. Falls back
 // to the whole list when too few words match.
+// Words that use only the stage's letters; the first stage adds
+// LESSON_HOME_WORDS (texts.js). Capitals start about a third of the words.
+function lessonText(count) {
+    const stage = LESSON_STAGES[gameState.lessonStage - 1];
+    const fits = (word) => [...word].every((character) => stage.letters.includes(character));
+    const list = [...new Set([...LESSON_HOME_WORDS, ...COMMON_WORDS])].filter(fits);
+    const text = commonWords(count, list, {
+        punctuation: Boolean(stage.punctuation),
+        numbers: Boolean(stage.numbers),
+    });
+    if (!stage.capitals) return text;
+    return text
+        .split(' ')
+        .map((word) => (runtime.random() < 0.35 ? word[0].toUpperCase() + word.slice(1) : word))
+        .join(' ');
+}
+
+function validLessons(data) {
+    const unlocked = data && data.unlocked;
+    return {
+        unlocked:
+            Number.isInteger(unlocked) && unlocked >= 1 && unlocked <= LESSON_STAGES.length
+                ? unlocked
+                : 1,
+    };
+}
+
+// Records a lesson run: a pass unlocks the next stage. Returns what the
+// result dialog says about it.
+function recordLesson(wpm, accuracy) {
+    const stage = gameState.lessonStage;
+    const passed = accuracy >= LESSON_PASS.accuracy && wpm >= LESSON_PASS.wpm;
+    if (!passed) {
+        return `Stage ${stage} needs ${LESSON_PASS.accuracy}% accuracy and ${LESSON_PASS.wpm} WPM; this run had ${accuracy}% and ${wpm} WPM.`;
+    }
+    if (stage === LESSON_STAGES.length) return `Stage ${stage} passed. That is the last stage.`;
+    if (stage < lessonProgress.unlocked) return `Stage ${stage} passed.`;
+    lessonProgress.unlocked = stage + 1;
+    saveJSON(STORAGE_KEYS.lessons, lessonProgress);
+    return `Stage ${stage} passed. Stage ${stage + 1}, ${LESSON_STAGES[stage].name}, is unlocked.`;
+}
+
 function wordsWithKeys(keys) {
     const matching = COMMON_WORDS.filter((word) => keys.some((key) => word.includes(key)));
     return matching.length >= 10 ? matching : COMMON_WORDS;
@@ -806,6 +873,10 @@ function getPassage() {
         const symbols = runtime.weakKeys.filter((key) => !/^[a-z]$/.test(key));
         const text = commonWords(count, wordsWithKeys(letters), plain);
         return { text: symbols.length ? withSymbols(text, symbols) : text, source: '' };
+    }
+    if (gameState.category === 'lessons') {
+        const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
+        return { text: lessonText(count), source: '' };
     }
     if (gameState.category === 'code') {
         const snippets = codeSnippets();
@@ -1292,6 +1363,7 @@ function endGame(endTime = performance.now()) {
     const { wpm, accuracy } = updateMetrics();
     const previousBest = currentBest();
     let isNewBest = false;
+    let lesson = '';
 
     // Runs under a second have no meaningful WPM. Show them, but do not record them.
     if (elapsedMs() >= 1000) {
@@ -1314,6 +1386,8 @@ function endGame(endTime = performance.now()) {
             };
         }
         saveJSON(STORAGE_KEYS.keyStats, keyStats);
+
+        if (gameState.category === 'lessons') lesson = recordLesson(wpm, accuracy);
 
         // Only the first daily run of the day is the day's result.
         const daily = runtime.challenge && runtime.challenge.daily;
@@ -1343,7 +1417,8 @@ function endGame(endTime = performance.now()) {
     updateHighScoreDisplay();
     renderChart();
     renderRunChart();
-    showResultModal(wpm, accuracy, { isNewBest, previousBest });
+    updateQuickBar();
+    showResultModal(wpm, accuracy, { isNewBest, previousBest, lesson });
 }
 
 function renderChart() {
@@ -1502,6 +1577,12 @@ function updateQuickBar() {
     quickWordCount.classList.toggle('hidden', gameState.mode !== 'words');
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
     codeLanguageSelect.classList.toggle('hidden', gameState.category !== 'code');
+    lessonSelect.classList.toggle('hidden', gameState.category !== 'lessons');
+    // Locked stages stay in the menu, disabled, so the path is visible.
+    [...lessonSelect.options].forEach((option, n) => {
+        option.disabled = n + 1 > lessonProgress.unlocked && n + 1 !== gameState.lessonStage;
+    });
+    lessonSelect.value = String(gameState.lessonStage);
     autoIndentOption.classList.toggle('hidden', gameState.category !== 'code');
     punctuationOption.classList.toggle('hidden', gameState.category !== 'common');
     numbersOption.classList.toggle('hidden', gameState.category !== 'common');
@@ -1516,11 +1597,15 @@ function updateQuickBar() {
     const noCustomText = gameState.category === 'custom' && !gameState.customText;
     const noOwnCode =
         gameState.category === 'code' && gameState.codeLanguage === OWN_CODE && !gameState.ownCode;
+    const lessons = gameState.category === 'lessons';
     practiceNote.classList.toggle(
         'hidden',
-        gameState.category !== 'weak' && !noCustomText && !noOwnCode
+        gameState.category !== 'weak' && !noCustomText && !noOwnCode && !lessons
     );
-    if (noOwnCode) {
+    if (lessons) {
+        const stage = LESSON_STAGES[gameState.lessonStage - 1];
+        practiceNote.textContent = `Stage ${gameState.lessonStage}, ${stage.name}: pass with ${LESSON_PASS.accuracy}% accuracy and ${LESSON_PASS.wpm} WPM.`;
+    } else if (noOwnCode) {
         practiceNote.textContent =
             'No code yet. Add it with Edit code; using JavaScript snippets until then.';
     } else if (noCustomText) {
@@ -1555,7 +1640,7 @@ function focusInDialog(element) {
     }
 }
 
-function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
+function showResultModal(wpm, accuracy, { isNewBest, previousBest, lesson = '' }) {
     const elapsed = elapsedMs();
     const raw = elapsed >= 1000 ? Math.round(runtime.typedChars / 5 / (elapsed / 60000)) : 0;
     const wrong = runtime.typedChars - runtime.correctChars;
@@ -1618,6 +1703,8 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
             : verdict;
         modalChallengeElement.textContent = `Challenge: you ${wpm} WPM, them ${challenge.wpm} WPM. ${outcome}`;
     }
+    modalLessonElement.textContent = lesson;
+    modalLessonElement.classList.toggle('hidden', !lesson);
     modalSourceElement.textContent = runtime.quoteSource;
     modalSourceElement.classList.toggle('hidden', !runtime.quoteSource);
     resultModal.classList.add('show');
@@ -1735,7 +1822,8 @@ const SITE_URL = 'https://tmhsdigital.github.io/Typing-Game/';
 function settingsLabel(separator = ' ') {
     const length =
         gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} words`;
-    const category = categorySelect.selectedOptions[0]?.textContent || gameState.category;
+    let category = categorySelect.selectedOptions[0]?.textContent || gameState.category;
+    if (gameState.category === 'lessons') category += `, stage ${gameState.lessonStage}`;
     return `${length}${separator}${category}`;
 }
 
@@ -1943,6 +2031,7 @@ const CHALLENGE_SETTINGS = [
     'codeLanguage',
     'isStopOnError',
     'isAutoIndent',
+    'lessonStage',
 ];
 
 function toBase64Url(bytes) {
@@ -2409,6 +2498,7 @@ function describeKey(key) {
     const languageOption =
         language && codeLanguageSelect.querySelector(`option[value="${CSS.escape(language)}"]`);
     if (languageOption) label += ` (${languageOption.textContent})`;
+    if (value === 'lessons') label += `, stage ${base.slice('lessons-'.length)}`;
     const extraLabels = extras.map((extra) => KEY_EXTRA_LABELS[extra] || extra);
     return [lengthLabel, label, ...extraLabels].join(', ');
 }
@@ -2590,6 +2680,7 @@ function exportData() {
         [STORAGE_KEYS.bests]: bests,
         [STORAGE_KEYS.keyStats]: keyStats,
         [STORAGE_KEYS.daily]: dailyResults,
+        [STORAGE_KEYS.lessons]: lessonProgress,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
@@ -2692,11 +2783,13 @@ async function importData(file) {
     bests = validBests(data[STORAGE_KEYS.bests]);
     keyStats = validKeyStats(data[STORAGE_KEYS.keyStats]);
     dailyResults = validDaily(data[STORAGE_KEYS.daily]);
+    lessonProgress = validLessons(data[STORAGE_KEYS.lessons]);
     Object.assign(gameState, sanitizeSettings(data[STORAGE_KEYS.settings]));
     saveJSON(STORAGE_KEYS.history, runHistory);
     saveJSON(STORAGE_KEYS.bests, bests);
     saveJSON(STORAGE_KEYS.keyStats, keyStats);
     saveJSON(STORAGE_KEYS.daily, dailyResults);
+    saveJSON(STORAGE_KEYS.lessons, lessonProgress);
     saveSettings();
     applySettingsToUI();
     updateHighScoreDisplay();
@@ -2709,18 +2802,20 @@ function clearData() {
     if (clearBtn.textContent !== 'Click again to clear') {
         clearBtn.textContent = 'Click again to clear';
         statsStatus.textContent =
-            'This removes run history, best scores, key stats, and daily results.';
+            'This removes run history, best scores, key stats, daily results, and lesson progress.';
         return;
     }
     runHistory = [];
     bests = {};
     keyStats = {};
     dailyResults = {};
+    lessonProgress = validLessons(null);
     for (const key of [
         STORAGE_KEYS.history,
         STORAGE_KEYS.bests,
         STORAGE_KEYS.keyStats,
         STORAGE_KEYS.daily,
+        STORAGE_KEYS.lessons,
     ]) {
         try {
             localStorage.removeItem(key);
@@ -2992,6 +3087,17 @@ function init() {
             requestAnimationFrame(() => typingInputElement.focus());
         });
     }
+    LESSON_STAGES.forEach((stage, n) => {
+        const option = document.createElement('option');
+        option.value = String(n + 1);
+        option.textContent = `${n + 1}. ${stage.name}`;
+        lessonSelect.appendChild(option);
+    });
+    lessonSelect.addEventListener('change', (e) => {
+        gameState.lessonStage = Number(e.target.value);
+        saveSettings();
+        resetGame();
+    });
     codeLanguageSelect.addEventListener('change', (e) => {
         gameState.codeLanguage = e.target.value;
         saveSettings();

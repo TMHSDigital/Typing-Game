@@ -5,7 +5,7 @@
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUND_PACKS, SOUND_PACK_NAMES, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
    currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette, VERSION,
-   weakestKeys, keyStats, endGame */
+   weakestKeys, keyStats, endGame, LESSON_STAGES, lessonText, seededRandom */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -2297,6 +2297,109 @@ test.describe('keyboard layout', () => {
             gameState.layout = 'qwerty';
         });
         expect(await page.evaluate(() => weakestKeys())).toEqual(['e']);
+    });
+});
+
+test.describe('lessons', () => {
+    test('each stage uses only its keys', async ({ page }) => {
+        await page.goto('/');
+        const texts = await page.evaluate(() =>
+            LESSON_STAGES.map((_, n) => {
+                gameState.lessonStage = n + 1;
+                runtime.random = seededRandom(n + 1);
+                return Array.from({ length: 20 }, () => lessonText(25)).join(' ');
+            })
+        );
+        expect(texts[0]).toMatch(/^[asdfghjkl ]+$/);
+        expect(texts[1]).toMatch(/^[asdfghjklqwertyuiop ]+$/);
+        expect(texts[1]).toMatch(/[qwertyuiop]/);
+        expect(texts[2]).toMatch(/^[a-z ]+$/);
+        expect(texts[2]).toMatch(/[zxcvbnm]/);
+        expect(texts[3]).toMatch(/^[a-zA-Z ]+$/);
+        expect(texts[3]).toMatch(/[A-Z]/);
+        expect(texts[4]).toMatch(/^[a-zA-Z ,.?]+$/);
+        expect(texts[4]).toMatch(/[,.]/);
+        expect(texts[5]).toMatch(/^[a-zA-Z0-9 ,.?]+$/);
+        expect(texts[5]).toMatch(/[0-9]/);
+    });
+
+    // Types the passage over two seconds of fake time, wrong where asked.
+    const typeStage = async (page, { wrong = 0 } = {}) => {
+        const quote = await currentQuote(page);
+        const text = [...quote]
+            .map((character, n) =>
+                n > 0 && n <= wrong ? (character === 'x' ? 'y' : 'x') : character
+            )
+            .join('');
+        await input(page).pressSequentially(text.slice(0, -1));
+        await page.clock.runFor(2000);
+        await input(page).press(text[text.length - 1]);
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+    };
+
+    test('a pass unlocks the next stage, and progress survives a reload and an export', async ({
+        page,
+        browser,
+    }) => {
+        await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+        await page.addInitScript(() => {
+            if (!localStorage.getItem('typingGameSettings')) {
+                localStorage.setItem(
+                    'typingGameSettings',
+                    JSON.stringify({ mode: 'words', category: 'lessons' })
+                );
+            }
+        });
+        await page.goto('/');
+        await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
+        await expect(page.locator('#practice-note')).toHaveText(
+            'Stage 1, Home row: pass with 95% accuracy and 20 WPM.'
+        );
+        await expect(page.locator('#lesson-select option[value="2"]')).toBeDisabled();
+
+        // Too many mistakes: no pass.
+        await typeStage(page, { wrong: 5 });
+        await expect(page.locator('#modal-lesson')).toHaveText(
+            /^Stage 1 needs 95% accuracy and 20 WPM; this run had \d+% and \d+ WPM\.$/
+        );
+        await page.locator('#play-again-btn').click();
+        await expect(page.locator('#lesson-select option[value="2"]')).toBeDisabled();
+
+        await typeStage(page);
+        await expect(page.locator('#modal-lesson')).toHaveText(
+            'Stage 1 passed. Stage 2, Top row, is unlocked.'
+        );
+        await expect(page.locator('#result-title')).toHaveText('10 words · Lessons, stage 1');
+        await page.locator('#play-again-btn').click();
+        await expect(page.locator('#lesson-select option[value="2"]')).toBeEnabled();
+        await expect(page.locator('#lesson-select option[value="3"]')).toBeDisabled();
+
+        await page.reload();
+        await expect(page.locator('#lesson-select option[value="2"]')).toBeEnabled();
+        await page.locator('#lesson-select').selectOption('2');
+        expect(await page.evaluate(() => settingsKey())).toBe('words:10w:lessons-2');
+
+        await page.locator('#stats-btn').click();
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#export-btn').click(),
+        ]);
+        const saved = test.info().outputPath('export.json');
+        await download.saveAs(saved);
+        const fresh = await browser.newContext();
+        const other = await fresh.newPage();
+        await other.goto('/');
+        await other.locator('#stats-btn').click();
+        await other.locator('#import-input').setInputFiles({
+            name: 'export.json',
+            mimeType: 'application/json',
+            buffer: fs.readFileSync(saved),
+        });
+        await expect(other.locator('#stats-status')).toContainText('Imported');
+        await other.keyboard.press('Escape');
+        await expect(other.locator('#lesson-select option[value="2"]')).toBeEnabled();
+        await expect(other.locator('#lesson-select')).toHaveValue('2');
+        await fresh.close();
     });
 });
 

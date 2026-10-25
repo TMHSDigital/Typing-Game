@@ -14,8 +14,11 @@ const TYPABLE = /^[ -~]*$/;
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'texts.js'), 'utf8');
 const sandbox = {};
-vm.runInNewContext(`${source}\nthis.texts = { COMMON_WORDS, QUOTES, CODE_SNIPPETS };`, sandbox);
-const { COMMON_WORDS, QUOTES, CODE_SNIPPETS } = sandbox.texts;
+vm.runInNewContext(
+    `${source}\nthis.texts = { COMMON_WORDS, QUOTES, CODE_SNIPPETS, LESSON_HOME_WORDS };`,
+    sandbox
+);
+const { COMMON_WORDS, QUOTES, CODE_SNIPPETS, LESSON_HOME_WORDS } = sandbox.texts;
 
 // The same content in every browser project, so it is checked once.
 test.skip(({ browserName }) => browserName !== 'chromium', 'checked in Chromium only');
@@ -23,6 +26,11 @@ test.skip(({ browserName }) => browserName !== 'chromium', 'checked in Chromium 
 test('common words are unique lowercase letters', () => {
     expect(COMMON_WORDS.filter((word) => !/^[a-z]+$/.test(word))).toEqual([]);
     expect(COMMON_WORDS.length).toBe(new Set(COMMON_WORDS).size);
+});
+
+test('home row lesson words use only the home row, once each', () => {
+    expect(LESSON_HOME_WORDS.filter((word) => !/^[asdfghjkl]+$/.test(word))).toEqual([]);
+    expect(LESSON_HOME_WORDS.length).toBe(new Set(LESSON_HOME_WORDS).size);
 });
 
 test('quotes are typable, trimmed, unique, and short enough', () => {

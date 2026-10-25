@@ -29,6 +29,16 @@ const COMMON_WORDS = [
     'group', 'play', 'stand', 'increase', 'early', 'course', 'change', 'help', 'line', 'city',
 ]; // prettier-ignore
 
+// --- Lessons ---
+// Words typed with only the home row (a s d f g h j k l), for the first
+// lesson stage, where few common words fit.
+const LESSON_HOME_WORDS = [
+    'a', 'as', 'ask', 'all', 'add', 'ads', 'dad', 'had', 'has', 'sad',
+    'lad', 'fad', 'gas', 'hall', 'fall', 'glad', 'flag', 'half', 'dash', 'gash',
+    'lash', 'sash', 'salad', 'shall', 'flask', 'alas', 'gala', 'jag', 'lag', 'hag',
+    'slag', 'flash', 'salsa', 'alfalfa', 'fads', 'lads', 'gags', 'hash',
+]; // prettier-ignore
+
 // --- Quotes ---
 // Category name to passages. `source` is shown after a run and is left
 // empty when the attribution could not be confirmed. Book passages are from
