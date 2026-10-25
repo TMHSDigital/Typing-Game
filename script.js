@@ -54,6 +54,11 @@ const statsModal = document.getElementById('stats-modal');
 const statsBtn = document.getElementById('stats-btn');
 const statsSummary = document.getElementById('stats-summary');
 const statsTables = document.getElementById('stats-tables');
+const statsHeatmap = document.getElementById('stats-heatmap');
+const dailyChartContainer = document.getElementById('daily-chart-container');
+const dailyChartTitle = document.getElementById('daily-chart-title');
+const dailyChart = document.getElementById('daily-chart');
+const dailyChartSummary = document.getElementById('daily-chart-summary');
 const statsBestsBody = document.getElementById('stats-bests');
 const statsRunsBody = document.getElementById('stats-runs');
 const statsStatus = document.getElementById('stats-status');
@@ -1602,11 +1607,115 @@ function tableRow(cells) {
     return row;
 }
 
+// A US QWERTY layout. Each key counts the character on it and its shifted
+// one (a letter's capital, or the symbol above a digit or punctuation key).
+const HEATMAP_ROWS = ['`1234567890-=', 'qwertyuiop[]\\', "asdfghjkl;'", 'zxcvbnm,./', ' '];
+const SHIFTED = '~!@#$%^&*()_+{}|:"<>?';
+const UNSHIFTED = "`1234567890-=[]\\;',./";
+
+function keyStat(key) {
+    const shifted = /[a-z]/.test(key) ? key.toUpperCase() : SHIFTED[UNSHIFTED.indexOf(key)];
+    const total = { attempts: 0, misses: 0 };
+    for (const character of [key, shifted]) {
+        const stat = keyStats[character];
+        if (!stat) continue;
+        total.attempts += stat.attempts;
+        total.misses += stat.misses;
+    }
+    return total;
+}
+
+// Keys shaded by miss rate, relative to the most missed key. Each key's
+// accessible name carries its rate and attempts.
+function renderHeatmap() {
+    const stats = HEATMAP_ROWS.map((row) => [...row].map((key) => [key, keyStat(key)]));
+    const rates = stats
+        .flat()
+        .filter(([, stat]) => stat.attempts >= WEAK_MIN_ATTEMPTS)
+        .map(([, stat]) => stat.misses / stat.attempts);
+    const worst = Math.max(0, ...rates);
+    statsHeatmap.textContent = '';
+    for (const row of stats) {
+        const rowElement = document.createElement('div');
+        rowElement.className = 'heatmap-row';
+        for (const [key, stat] of row) {
+            const cell = document.createElement('span');
+            cell.className = key === ' ' ? 'heat-key space' : 'heat-key';
+            cell.textContent = key === ' ' ? 'space' : key;
+            cell.setAttribute('role', 'img');
+            const name = key === ' ' ? 'space' : key;
+            if (stat.attempts < WEAK_MIN_ATTEMPTS) {
+                cell.classList.add('no-data');
+                cell.setAttribute('aria-label', `${name}: not enough data`);
+            } else {
+                const rate = stat.misses / stat.attempts;
+                const percent = Math.round(rate * 100);
+                cell.style.setProperty('--heat', worst ? rate / worst : 0);
+                cell.setAttribute(
+                    'aria-label',
+                    `${name}: ${percent}% missed of ${stat.attempts} attempts`
+                );
+            }
+            cell.title = cell.getAttribute('aria-label');
+            rowElement.appendChild(cell);
+        }
+        statsHeatmap.appendChild(rowElement);
+    }
+}
+
+// Local calendar day of an ISO date, as YYYY-MM-DD.
+function dayOf(iso) {
+    const date = new Date(iso);
+    if (isNaN(date)) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// Average WPM per day at the current settings, oldest first.
+function renderDailyChart() {
+    const key = settingsKey();
+    const days = new Map();
+    for (const run of runHistory) {
+        const day = dayOf(run.date);
+        if (run.key !== key || !day) continue;
+        const total = days.get(day) || { sum: 0, count: 0 };
+        total.sum += run.wpm;
+        total.count++;
+        days.set(day, total);
+    }
+    const entries = [...days.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
+    dailyChartContainer.classList.toggle('hidden', entries.length < 2);
+    if (entries.length < 2) return;
+    const data = entries.map(([, total]) => Math.round(total.sum / total.count));
+    const first = entries[0][0];
+    const last = entries[entries.length - 1][0];
+    drawLineChart(dailyChart, data, true, [first, last]);
+    dailyChartTitle.textContent = `WPM by day, ${settingsLabel(' · ')}`;
+    dailyChartSummary.textContent = `Daily average WPM from ${first} to ${last}: ${data.join(', ')}.`;
+}
+
+// Days in a row, ending today or yesterday, with at least one recorded run.
+function currentStreak(now = new Date()) {
+    const days = new Set(runHistory.map((run) => dayOf(run.date)));
+    const day = new Date(now);
+    if (!days.has(dayOf(day.toISOString()))) day.setDate(day.getDate() - 1);
+    let streak = 0;
+    while (days.has(dayOf(day.toISOString()))) {
+        streak++;
+        day.setDate(day.getDate() - 1);
+    }
+    return streak;
+}
+
 function renderStats() {
     const recent = runHistory.slice(0, 10);
+    const streak = currentStreak();
+    const streakText = streak > 1 ? ` Practiced ${streak} days in a row.` : '';
     statsSummary.textContent = recent.length
-        ? `${runHistory.length} recorded ${runHistory.length === 1 ? 'run' : 'runs'}. Average of the last ${recent.length}: ${Math.round(recent.reduce((sum, run) => sum + run.wpm, 0) / recent.length)} WPM.`
+        ? `${runHistory.length} recorded ${runHistory.length === 1 ? 'run' : 'runs'}. Average of the last ${recent.length}: ${Math.round(recent.reduce((sum, run) => sum + run.wpm, 0) / recent.length)} WPM.${streakText}`
         : 'No runs yet. Finish a run of a second or longer to see it here.';
+    renderHeatmap();
+    renderDailyChart();
     // Empty tables with headers say nothing the line above does not.
     statsTables.classList.toggle('hidden', recent.length === 0 && !Object.keys(bests).length);
 

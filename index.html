@@ -543,6 +543,37 @@
                 <p id="stats-summary" class="stats-summary"></p>
 
                 <div id="stats-tables">
+                    <h3 class="stats-heading" id="heatmap-heading">Misses by key</h3>
+                    <p class="heatmap-note">
+                        Darker keys are missed more often, across all recorded runs. Dashed keys
+                        have fewer than five attempts.
+                    </p>
+                    <div
+                        id="stats-heatmap"
+                        class="heatmap"
+                        role="group"
+                        aria-labelledby="heatmap-heading"
+                    ></div>
+
+                    <div id="daily-chart-container" class="chart-container daily-chart hidden">
+                        <h3 id="daily-chart-title">WPM by day</h3>
+                        <div class="chart-plot">
+                            <span class="chart-y-max"></span>
+                            <span class="chart-y-min"></span>
+                            <svg
+                                id="daily-chart"
+                                width="100%"
+                                height="100"
+                                viewBox="0 0 300 100"
+                                preserveAspectRatio="none"
+                                aria-hidden="true"
+                            ></svg>
+                            <span class="chart-x-start"></span>
+                            <span class="chart-x-end"></span>
+                        </div>
+                        <p id="daily-chart-summary" class="visually-hidden"></p>
+                    </div>
+
                     <h3 class="stats-heading">Best per setting</h3>
                     <table class="stats-table compact">
                         <thead>

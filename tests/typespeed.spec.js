@@ -4,7 +4,7 @@
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
-   currentBest, validBests */
+   currentBest, validBests, currentStreak, runHistory */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -2330,6 +2330,128 @@ test('the service worker removes caches from older versions', async ({ browser }
     await page.evaluate(() => navigator.serviceWorker.ready);
     await expect.poll(() => page.evaluate(() => caches.keys())).toEqual(['typespeed-v2']);
     await context.close();
+});
+
+test.describe('stats views', () => {
+    const keyStatsSeed = () => {
+        localStorage.setItem(
+            'typingGameKeyStats',
+            JSON.stringify({
+                e: { attempts: 20, misses: 4 },
+                E: { attempts: 5, misses: 1 },
+                '{': { attempts: 10, misses: 5 },
+                '[': { attempts: 2, misses: 0 },
+                q: { attempts: 3, misses: 3 },
+            })
+        );
+    };
+
+    test('the heatmap shades keys by miss rate and names each one', async ({ page }) => {
+        await page.addInitScript(keyStatsSeed);
+        await page.goto('/');
+        await page.locator('#stats-btn').click();
+        const key = (label) =>
+            page
+                .locator('#stats-heatmap .heat-key')
+                .filter({ hasText: new RegExp(`^\\${label}$`) });
+        // e and E count together: 5 misses of 25.
+        await expect(key('e')).toHaveAttribute('aria-label', 'e: 20% missed of 25 attempts');
+        // [ and { count together and are the worst key, 5 of 12.
+        await expect(key('[')).toHaveAttribute('aria-label', '[: 42% missed of 12 attempts');
+        // q has fewer than five attempts.
+        await expect(key('q')).toHaveAttribute('aria-label', 'q: not enough data');
+        await expect(key('q')).toHaveClass(/no-data/);
+        const heat = await page.evaluate(() =>
+            [...document.querySelectorAll('#stats-heatmap .heat-key')]
+                .filter((cell) => ['e', '['].includes(cell.textContent))
+                .map((cell) => Number(cell.style.getPropertyValue('--heat')).toFixed(2))
+        );
+        expect(heat).toEqual(['0.48', '1.00']);
+        await expect(page.locator('#stats-heatmap .heat-key')).toHaveCount(13 + 13 + 11 + 10 + 1);
+    });
+
+    test('a streak counts days in a row with runs, ending today or yesterday', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-03-10T12:00:00') });
+        await page.goto('/');
+        const streak = (dates) =>
+            page.evaluate((list) => {
+                runHistory.length = 0;
+                runHistory.push(
+                    ...list.map((date) => ({
+                        wpm: 40,
+                        accuracy: 100,
+                        date: new Date(date).toISOString(),
+                        mode: 'time',
+                        key: 'time:60s:common',
+                    }))
+                );
+                return currentStreak();
+            }, dates);
+        expect(await streak([])).toBe(0);
+        expect(await streak(['2026-03-10T08:00', '2026-03-09T23:00', '2026-03-08T07:00'])).toBe(3);
+        // No run yet today: the streak up to yesterday still counts.
+        expect(await streak(['2026-03-09T08:00', '2026-03-08T08:00'])).toBe(2);
+        // A missed day ends it.
+        expect(await streak(['2026-03-10T08:00', '2026-03-08T08:00'])).toBe(1);
+        expect(await streak(['2026-03-07T08:00'])).toBe(0);
+    });
+
+    test('WPM by day averages each day at the current settings', async ({ page }) => {
+        await page.addInitScript(() => {
+            const run = (wpm, date, key = 'time:60s:common') => ({
+                wpm,
+                accuracy: 100,
+                date: new Date(date).toISOString(),
+                mode: 'time',
+                key,
+            });
+            localStorage.setItem(
+                'typingGameHistory',
+                JSON.stringify([
+                    run(60, '2026-03-03T10:00'),
+                    run(40, '2026-03-03T09:00'),
+                    run(99, '2026-03-02T09:00', 'words:10w:common'),
+                    run(30, '2026-03-01T09:00'),
+                ])
+            );
+        });
+        await page.goto('/');
+        await page.locator('#stats-btn').click();
+        const chart = page.locator('#daily-chart-container');
+        await expect(chart).toBeVisible();
+        await expect(page.locator('#daily-chart circle')).toHaveCount(2);
+        await expect(chart.locator('.chart-x-start')).toHaveText('2026-03-01');
+        await expect(chart.locator('.chart-x-end')).toHaveText('2026-03-03');
+        await expect(chart.locator('.chart-y-max')).toHaveText('50');
+        await expect(page.locator('#daily-chart-summary')).toHaveText(
+            'Daily average WPM from 2026-03-01 to 2026-03-03: 30, 50.'
+        );
+    });
+
+    for (const theme of ['dark', 'light', 'contrast']) {
+        test(`${theme}: the heatmap passes the contrast check`, async ({ page }) => {
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await page.addInitScript((value) => {
+                localStorage.setItem('typingGameSettings', JSON.stringify({ theme: value }));
+                localStorage.setItem(
+                    'typingGameKeyStats',
+                    JSON.stringify({
+                        a: { attempts: 10, misses: 10 },
+                        s: { attempts: 10, misses: 5 },
+                        d: { attempts: 10, misses: 0 },
+                    })
+                );
+            }, theme);
+            await page.goto('/');
+            await page.locator('#stats-btn').click();
+            await expect(page.locator('#stats-modal')).toHaveClass(/show/);
+            const results = await new AxeBuilder({ page })
+                .withRules(['color-contrast'])
+                .include('#stats-heatmap')
+                .analyze();
+            expect(results.violations.flatMap((v) => v.nodes.map((n) => n.target))).toEqual([]);
+        });
+    }
 });
 
 test.describe('storage', () => {
