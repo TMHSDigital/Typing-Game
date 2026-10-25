@@ -3,7 +3,7 @@
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
-   getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement */
+   getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement, bests */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -1365,8 +1365,13 @@ test.describe('stats dialog', () => {
         localStorage.setItem(
             'typingGameBests',
             JSON.stringify({
-                'time:60s:common': { wpm: 60, keystrokes: [{ t: 100, i: 1 }] },
-                'words:25w:code': { wpm: 40, keystrokes: [] },
+                'time:60s:common': {
+                    wpm: 60,
+                    keystrokes: [{ t: 100, i: 1 }],
+                    seed: 8,
+                    textHash: 'k3x9q1',
+                },
+                'words:25w:code': { wpm: 40, keystrokes: [], textHash: 'NOT A HASH' },
             })
         );
         localStorage.setItem(
@@ -1438,7 +1443,12 @@ test.describe('stats dialog', () => {
             bests: JSON.parse(localStorage.getItem('typingGameBests')),
             keyStats: JSON.parse(localStorage.getItem('typingGameKeyStats')),
         }));
-        expect(stored.bests['time:60s:common'].wpm).toBe(60);
+        expect(stored.bests['time:60s:common']).toMatchObject({
+            wpm: 60,
+            seed: 8,
+            textHash: 'k3x9q1',
+        });
+        expect(stored.bests['words:25w:code'].textHash).toBeUndefined();
         expect(stored.keyStats).toEqual({ k: { attempts: 9, misses: 3 } });
         await other.keyboard.press('Escape');
         await expect(other.locator('#high-score')).toHaveText('60');
@@ -1535,6 +1545,49 @@ test.describe('ghost on the same passage', () => {
         await page.keyboard.press('Tab');
         expect(await currentQuote(page)).not.toBe(first);
         await expect(page.locator('#ghost-status')).toBeHidden();
+    });
+
+    test('a best recorded on a different version of the text is not replayed until a new best', async ({
+        page,
+    }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'typingGameSettings',
+                JSON.stringify({ mode: 'words', isGhostEnabled: true })
+            );
+        });
+        await page.goto('/');
+        const first = await currentQuote(page);
+        await input(page).pressSequentially(first, { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        const seed = await page.evaluate(() => runtime.seed);
+        const stored = await page.evaluate(() =>
+            JSON.parse(localStorage.getItem('typingGameBests'))
+        );
+        expect(stored['words:10w:common'].textHash).toMatch(/^[0-9a-z]+$/);
+
+        // An edit to texts.js changes a word of the best's passage. The best's
+        // WPM is lowered so the next run replaces it.
+        await page.evaluate((word) => {
+            COMMON_WORDS.forEach((w, n) => {
+                if (w === word) COMMON_WORDS[n] = 'zzz';
+            });
+            bests['words:10w:common'].wpm = 1;
+        }, first.split(' ')[0]);
+        await page.locator('#play-again-btn').click();
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'Your best for these settings was recorded on a different version of the text. Set a new best to race a ghost.'
+        );
+        expect(await page.evaluate(() => runtime.seed)).not.toBe(seed);
+        const second = await currentQuote(page);
+        await input(page).press(second[0]);
+        expect(await page.evaluate(() => runtime.ghostTimeouts.length)).toBe(0);
+
+        await input(page).pressSequentially(second.slice(1), { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        await page.locator('#play-again-btn').click();
+        await expect(page.locator('#ghost-status')).toHaveText(/^Racing your best: \d+ WPM$/);
+        expect(await currentQuote(page)).toBe(second);
     });
 
     test('time mode replays the same sequence of passages', async ({ page }) => {
@@ -1709,6 +1762,41 @@ test.describe('challenge links', () => {
         await expect(page.locator('#quick-mode .pill.active')).toHaveText('Words');
     });
 
+    test('a link recorded on a different version of the text says so and calls no winner', async ({
+        page,
+    }) => {
+        await page.addInitScript(recordClipboard);
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ mode: 'words' }));
+        });
+        await page.goto('/');
+        const sent = await currentQuote(page);
+        await input(page).pressSequentially(sent, { delay: 40 });
+        await page.locator('#challenge-btn').click();
+        await expect(page.locator('#challenge-btn')).toHaveText('Link copied');
+        const link = await page.evaluate(() => window.copiedText);
+
+        // An edit to texts.js changes a word of the sender's passage.
+        await page.evaluate((word) => {
+            COMMON_WORDS.forEach((w, n) => {
+                if (w === word) COMMON_WORDS[n] = 'zzz';
+            });
+        }, sent.split(' ')[0]);
+        await page.goto(link);
+        await expect(page.locator('#ghost-status')).toHaveText(
+            'This challenge was recorded on a different version of the text, so there is no ghost or winner.'
+        );
+        const received = await currentQuote(page);
+        expect(received).not.toBe(sent);
+        await input(page).press(received[0]);
+        expect(await page.evaluate(() => runtime.ghostTimeouts.length)).toBe(0);
+
+        await input(page).pressSequentially(received.slice(1), { delay: 40 });
+        await expect(page.locator('#modal-challenge')).toHaveText(
+            /^Challenge: you \d+ WPM, them \d+ WPM\. Recorded on a different version of the text: no winner\.$/
+        );
+    });
+
     test("play under the sender's Stop on error and Skip indentation", async ({ page }) => {
         await page.goto('/');
         const code = await page.evaluate(() =>
@@ -1774,8 +1862,18 @@ test.describe('challenge links', () => {
             const decoded = parseChallenge(await decodeChallenge(await encodeChallenge(payload)));
             const negativeTime = parseChallenge({ ...payload, d: [100, 1, -50, 1] });
             const badSeed = parseChallenge({ ...payload, seed: -1 });
-            return { decoded, negativeTime, badSeed };
+            const withHash = parseChallenge({ ...payload, v: 2, h: 'abc12' });
+            const missingHash = parseChallenge({ ...payload, v: 2 });
+            const badHash = parseChallenge({ ...payload, v: 2, h: 'ABC!' });
+            const laterVersion = parseChallenge({ ...payload, v: 3, h: 'abc12' });
+            return { decoded, negativeTime, badSeed, withHash, missingHash, badHash, laterVersion };
         });
+        // Version 1 links have no hash and are played without the check.
+        expect(result.decoded.textHash).toBeUndefined();
+        expect(result.withHash.textHash).toBe('abc12');
+        expect(result.missingHash).toBeNull();
+        expect(result.badHash).toBeNull();
+        expect(result.laterVersion).toBeNull();
         expect(result.decoded.seed).toBe(42);
         expect(result.decoded.settings).toMatchObject({
             mode: 'time',

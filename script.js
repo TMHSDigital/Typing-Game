@@ -209,6 +209,8 @@ const runtime = {
     seed: 0, // passages for the run are drawn from this seed
     random: Math.random, // seeded generator, replaced in resetGame
     weakKeys: [], // letters the Weak Keys category uses this run
+    passageHash: '', // textHash of the run's first passage
+    textChanged: false, // the replayed run was recorded on a different first passage
     ghostIndex: 0, // character index the ghost has reached
     challenge: null, // decoded challenge link, kept across resets until a run uses it
     indent: [], // per character of quoteText: true for indentation Skip indentation fills in
@@ -222,7 +224,8 @@ const CHART_POINTS = 10;
 let runHistory = loadJSON(STORAGE_KEYS.history, []);
 if (!Array.isArray(runHistory)) runHistory = [];
 
-// Best run per settings combination: { [settingsKey]: { wpm, keystrokes } }.
+// Best run per settings combination:
+// { [settingsKey]: { wpm, keystrokes, seed, textHash, weakKeys? } }.
 let bests = loadJSON(STORAGE_KEYS.bests, {});
 if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
 
@@ -487,6 +490,21 @@ function getPassage() {
     return pickQuote(categoryQuotes);
 }
 
+// textHash of the first passage a seed gives under the current settings.
+// Bests and challenge links store it, so a replay can tell when a change to
+// texts.js has changed the passages a seed gives.
+function firstPassageHash(seed, weakKeys) {
+    const saved = { random: runtime.random, weakKeys: runtime.weakKeys, lastQuoteIndex };
+    runtime.random = seededRandom(seed);
+    runtime.weakKeys = weakKeys;
+    lastQuoteIndex = -1;
+    const hash = textHash(getPassage().text);
+    runtime.random = saved.random;
+    runtime.weakKeys = saved.weakKeys;
+    lastQuoteIndex = saved.lastQuoteIndex;
+    return hash;
+}
+
 function renderNewQuote() {
     const passage = getPassage();
     runtime.quoteText = passage.text;
@@ -695,10 +713,11 @@ function startGame() {
     runtime.interval = setInterval(tick, 250);
 
     const best = currentBest();
+    // A ghost recorded on other text would not match this passage.
     if (runtime.challenge) {
         runtime.challenge.used = true;
-        startGhostPlayback({ keystrokes: runtime.challenge.strokes });
-    } else if (gameState.isGhostEnabled && best) {
+        if (!runtime.textChanged) startGhostPlayback({ keystrokes: runtime.challenge.strokes });
+    } else if (gameState.isGhostEnabled && best && !runtime.textChanged) {
         startGhostPlayback(best);
     }
     updateGhostStatus();
@@ -769,6 +788,12 @@ function updateGhostStatus() {
         return;
     }
     ghostStatus.classList.remove('hidden');
+    if (runtime.textChanged) {
+        ghostStatus.textContent = challenge
+            ? 'This challenge was recorded on a different version of the text, so there is no ghost or winner.'
+            : 'Your best for these settings was recorded on a different version of the text. Set a new best to race a ghost.';
+        return;
+    }
     const best = challenge || currentBest();
     if (challenge && !runtime.isStarted) {
         ghostStatus.textContent = `Challenge: beat ${challenge.wpm} WPM on this text`;
@@ -848,7 +873,12 @@ function endGame(endTime = performance.now()) {
         saveJSON(STORAGE_KEYS.keyStats, keyStats);
 
         if (wpm > (previousBest ? previousBest.wpm : 0)) {
-            bests[key] = { wpm, keystrokes: runtime.ghostStrokes, seed: runtime.seed };
+            bests[key] = {
+                wpm,
+                keystrokes: runtime.ghostStrokes,
+                seed: runtime.seed,
+                textHash: runtime.passageHash,
+            };
             if (gameState.category === 'weak') bests[key].weakKeys = runtime.weakKeys;
             saveJSON(STORAGE_KEYS.bests, bests);
             isNewBest = true;
@@ -928,12 +958,23 @@ function renderRunChart() {
 }
 
 // The run whose passages the next run replays: an open challenge, or with
-// Ghost Mode on, the best for these settings if it recorded its seed.
-// Otherwise runs start from a new seed.
+// Ghost Mode on, the best for these settings if it recorded its seed and
+// was recorded on the same text. Otherwise runs start from a new seed.
 function replayedRun() {
     const best = currentBest();
     if (runtime.challenge) return runtime.challenge;
+    if (runtime.textChanged) return null;
     return gameState.isGhostEnabled && best && Number.isInteger(best.seed) ? best : null;
+}
+
+const replayedWeakKeys = (replay) =>
+    replay && Array.isArray(replay.weakKeys) ? replay.weakKeys : weakestKeys();
+
+// A replayed run with a stored hash that its seed no longer reproduces was
+// recorded before a change to texts.js. Runs without a hash are not checked.
+function textChangedSince(replay) {
+    if (!replay || typeof replay.textHash !== 'string') return false;
+    return replay.textHash !== firstPassageHash(replay.seed, replayedWeakKeys(replay));
 }
 
 function resetGame() {
@@ -956,12 +997,16 @@ function resetGame() {
         keyStats: {},
         ghostIndex: 0,
         challengeUrl: '',
+        textChanged: false,
     });
 
+    // A challenge on changed text is still played, without a ghost or
+    // winner. A best on changed text is not replayed.
+    runtime.textChanged = textChangedSince(replayedRun());
     const replay = replayedRun();
     runtime.seed = replay ? replay.seed : newSeed();
     runtime.random = seededRandom(runtime.seed);
-    runtime.weakKeys = replay && Array.isArray(replay.weakKeys) ? replay.weakKeys : weakestKeys();
+    runtime.weakKeys = replayedWeakKeys(replay);
     lastQuoteIndex = -1;
 
     runtime.timer = gameState.mode === 'time' ? gameState.duration : 0;
@@ -979,6 +1024,7 @@ function resetGame() {
     updateQuickBar();
     updateHighScoreDisplay();
     renderNewQuote();
+    runtime.passageHash = textHash(runtime.quoteText);
     updateGhostStatus();
     typingInputElement.focus();
 }
@@ -1071,8 +1117,11 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
     const challenge = runtime.challenge;
     modalChallengeElement.classList.toggle('hidden', !challenge);
     if (challenge) {
-        const outcome =
+        const verdict =
             wpm > challenge.wpm ? 'You won.' : wpm === challenge.wpm ? 'A tie.' : 'They won.';
+        const outcome = runtime.textChanged
+            ? 'Recorded on a different version of the text: no winner.'
+            : verdict;
         modalChallengeElement.textContent = `Challenge: you ${wpm} WPM, them ${challenge.wpm} WPM. ${outcome}`;
     }
     modalSourceElement.textContent = runtime.quoteSource;
@@ -1121,10 +1170,11 @@ async function shareResult() {
 }
 
 // --- Challenge Links ---
-// A link carries a finished run's settings, seed, WPM, and keystroke
-// timings in the URL hash. Opening it plays those passages with the run as
-// the ghost, without changing the receiver's saved settings.
-const CHALLENGE_VERSION = 1;
+// A link carries a finished run's settings, seed, first passage hash, WPM,
+// and keystroke timings in the URL hash. Opening it plays those passages
+// with the run as the ghost, without changing the receiver's saved
+// settings. Version 1 links have no passage hash and are not checked.
+const CHALLENGE_VERSION = 2;
 const CHALLENGE_MAX_LENGTH = 20000; // characters in the hash
 const CHALLENGE_MAX_STROKES = 5000;
 const CHALLENGE_SETTINGS = [
@@ -1199,7 +1249,9 @@ async function decodeChallenge(text) {
 
 // Checks every field of a decoded payload. Returns null if anything is off.
 function parseChallenge(data) {
-    if (!data || data.v !== CHALLENGE_VERSION || !data.s || typeof data.s !== 'object') return null;
+    if (!data || ![1, CHALLENGE_VERSION].includes(data.v)) return null;
+    if (!data.s || typeof data.s !== 'object') return null;
+    if (data.v === CHALLENGE_VERSION && !isTextHash(data.h)) return null;
     if (!Number.isInteger(data.seed) || data.seed < 0 || data.seed >= 4294967296) return null;
     if (!isNumber(data.wpm) || data.wpm < 0 || data.wpm > 1000) return null;
     if (!Array.isArray(data.d) || data.d.length % 2 !== 0) return null;
@@ -1222,7 +1274,16 @@ function parseChallenge(data) {
     const weakKeys = Array.isArray(data.k)
         ? data.k.filter((key) => /^[a-z]$/.test(key)).slice(0, WEAK_KEY_COUNT)
         : [];
-    return { settings, seed: data.seed, wpm: Math.round(data.wpm), weakKeys, strokes, used: false };
+    const challenge = {
+        settings,
+        seed: data.seed,
+        wpm: Math.round(data.wpm),
+        weakKeys,
+        strokes,
+        used: false,
+    };
+    if (data.v === CHALLENGE_VERSION) challenge.textHash = data.h;
+    return challenge;
 }
 
 function challengePayload() {
@@ -1241,6 +1302,7 @@ function challengePayload() {
         v: CHALLENGE_VERSION,
         s: settings,
         seed: runtime.seed,
+        h: runtime.passageHash,
         wpm: Number(modalWpmElement.textContent),
         k: gameState.category === 'weak' ? runtime.weakKeys : [],
         d: deltas,
@@ -1528,6 +1590,8 @@ function exportData() {
 }
 
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+// textHash output: a 32-bit number in base 36.
+const isTextHash = (value) => typeof value === 'string' && /^[0-9a-z]{1,7}$/.test(value);
 
 function validHistory(list) {
     if (!Array.isArray(list)) return [];
@@ -1554,6 +1618,7 @@ function validBests(map) {
         const keystrokes = best.keystrokes.filter((s) => s && isNumber(s.t) && isNumber(s.i));
         result[key] = { wpm: best.wpm, keystrokes };
         if (Number.isInteger(best.seed)) result[key].seed = best.seed;
+        if (isTextHash(best.textHash)) result[key].textHash = best.textHash;
         if (Array.isArray(best.weakKeys)) {
             result[key].weakKeys = best.weakKeys.filter((k) => /^[a-z]$/.test(k)).slice(0, 3);
         }
