@@ -2286,6 +2286,51 @@ test('works offline after one visit', async ({ browser }) => {
     await context.close();
 });
 
+test('a network slower than the timeout gets the saved files', async ({ browser, browserName }) => {
+    // Only Chromium lets a test intercept the service worker's own requests.
+    test.skip(browserName !== 'chromium', 'Service worker requests are routed only in Chromium');
+    const context = await browser.newContext({ serviceWorkers: 'allow' });
+    const page = await context.newPage();
+    await page.goto('/');
+    await page.evaluate(async () => {
+        await navigator.serviceWorker.ready;
+        if (!navigator.serviceWorker.controller) {
+            await new Promise((resolve) =>
+                navigator.serviceWorker.addEventListener('controllerchange', resolve, {
+                    once: true,
+                })
+            );
+        }
+    });
+    const cacheNames = await page.evaluate(() => caches.keys());
+    expect(cacheNames).toEqual(['typespeed-v2']);
+
+    // Every response now takes 20 seconds.
+    await context.route('**/*', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 20_000));
+        await route.continue().catch(() => {});
+    });
+    const started = Date.now();
+    await page.reload({ timeout: 10_000 });
+    await expect(page.locator('#quote-display span').first()).toBeAttached({ timeout: 10_000 });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    await context.close();
+});
+
+test('the service worker removes caches from older versions', async ({ browser }) => {
+    const context = await browser.newContext({ serviceWorkers: 'allow' });
+    const page = await context.newPage();
+    await page.goto('/sw.js');
+    // A cache left by an older version, created before the worker installs.
+    await page.evaluate(() =>
+        caches.open('typespeed').then((cache) => cache.put('/old', new Response('x')))
+    );
+    await page.goto('/');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await expect.poll(() => page.evaluate(() => caches.keys())).toEqual(['typespeed-v2']);
+    await context.close();
+});
+
 test('the manifest names the app and its icons', async ({ request }) => {
     const response = await request.get('/manifest.webmanifest');
     expect(response.ok()).toBe(true);
