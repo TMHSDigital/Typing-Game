@@ -35,6 +35,7 @@ const modalTimeElement = document.getElementById('modal-time');
 const modalKeysElement = document.getElementById('modal-keys');
 const practiceBtn = document.getElementById('practice-btn');
 const replayBtn = document.getElementById('replay-btn');
+const saveImageBtn = document.getElementById('save-image-btn');
 const replayModal = document.getElementById('replay-modal');
 const replayClock = document.getElementById('replay-clock');
 const replayDisplay = document.getElementById('replay-display');
@@ -309,6 +310,7 @@ const runtime = {
     grid: [], // {typed, wrong} per GRID_SECONDS of the run, for the daily's share grid
     replay: { passages: [], events: [] }, // the run's passages and {t, p, value} per input event
     playback: null, // replay dialog state: {interval, position, last, speed, shown}
+    cardFile: null, // result image File, built when the result dialog opens
     challengeUrl: '', // link for the finished run, built when the result dialog opens
 };
 
@@ -1336,6 +1338,7 @@ function resetGame() {
         grid: [],
         replay: { passages: [], events: [] },
         playback: null,
+        cardFile: null,
     });
 
     // A challenge on changed text is still played, without a ghost or
@@ -1461,6 +1464,8 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
     challengeBtn.textContent = 'Copy challenge link';
     challengeLinkRow.classList.add('hidden');
     if (canChallenge) prepareChallengeUrl();
+    saveImageBtn.textContent = 'Save image';
+    prepareResultCard();
 
     const challenge = runtime.challenge;
     modalChallengeElement.classList.toggle('hidden', !challenge);
@@ -1642,6 +1647,150 @@ async function shareResult() {
     setTimeout(() => {
         shareBtn.textContent = 'Share result';
     }, 2000);
+}
+
+// --- Result image ---
+// A 1200x630 PNG of the result dialog's numbers and run chart, in the
+// current theme's colors, for posting where a link preview is not enough.
+const CARD_WIDTH = 1200;
+const CARD_HEIGHT = 630;
+
+// The theme's colors, read from the custom properties in style.css.
+function cardPalette() {
+    const style = getComputedStyle(document.documentElement);
+    const color = (name) => style.getPropertyValue(name).trim();
+    return {
+        background: color('--bg-dark'),
+        text: color('--text-main'),
+        muted: color('--text-muted'),
+        accent: color('--accent-secondary'),
+    };
+}
+
+const localDate = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+
+function drawResultCard() {
+    const canvas = document.createElement('canvas');
+    canvas.width = CARD_WIDTH;
+    canvas.height = CARD_HEIGHT;
+    const ctx = canvas.getContext('2d');
+    const palette = cardPalette();
+    const ui = getComputedStyle(document.documentElement).getPropertyValue('--font-ui');
+    const code = getComputedStyle(document.documentElement).getPropertyValue('--font-code');
+    const text = (value, x, y, font, color, align = 'left') => {
+        ctx.font = font;
+        ctx.fillStyle = color;
+        ctx.textAlign = align;
+        ctx.fillText(value, x, y);
+    };
+
+    ctx.fillStyle = palette.background;
+    ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+    text('TypeSpeed', 60, 90, `700 40px ${ui}`, palette.text);
+    text(resultTitle.textContent, 60, 140, `600 28px ${ui}`, palette.muted);
+
+    const wpm = modalWpmElement.textContent;
+    text(wpm, 60, 330, `700 180px ${code}`, palette.accent);
+    ctx.font = `700 180px ${code}`;
+    text('WPM', 60 + ctx.measureText(wpm).width + 20, 330, `40px ${code}`, palette.muted);
+
+    const details = [
+        ['Accuracy', modalAccuracyElement.textContent],
+        ['Raw WPM', modalRawElement.textContent],
+        ['Correct / wrong', modalCharsElement.textContent],
+        ['Time', modalTimeElement.textContent],
+    ];
+    details.forEach(([label, value], n) => {
+        const x = 60 + n * 260;
+        text(label, x, 420, `24px ${ui}`, palette.muted);
+        text(value, x, 470, `36px ${code}`, palette.text);
+    });
+
+    // Raw WPM by second, scaled to its own range like the dialog's chart.
+    const data = wpmBySecond();
+    if (data.length >= 2) {
+        const left = 700;
+        const top = 120;
+        const width = 440;
+        const height = 200;
+        const max = Math.max(...data);
+        const min = Math.min(...data);
+        const range = max - min || 1;
+        ctx.strokeStyle = palette.accent;
+        ctx.lineWidth = 4;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        data.forEach((value, n) => {
+            const x = left + (n / (data.length - 1)) * width;
+            const y = top + height - ((value - min) / range) * height;
+            if (n === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        text('Raw WPM by second', left, top - 24, `22px ${ui}`, palette.muted);
+    }
+
+    text(localDate(), 60, 580, `24px ${ui}`, palette.muted);
+    text(
+        SITE_URL.replace(/^https:\/\//, ''),
+        CARD_WIDTH - 60,
+        580,
+        `24px ${ui}`,
+        palette.muted,
+        'right'
+    );
+    return canvas;
+}
+
+function buildResultCard() {
+    const canvas = drawResultCard();
+    return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (blob)
+                resolve(new File([blob], `typespeed-${localDate()}.png`, { type: 'image/png' }));
+            else reject(new Error('Could not draw the image'));
+        }, 'image/png');
+    });
+}
+
+// Like the challenge link, the image is made when the dialog opens: phones
+// allow the share sheet only during the click itself.
+function prepareResultCard() {
+    const replay = runtime.replay;
+    buildResultCard()
+        .then((file) => {
+            if (runtime.replay === replay) runtime.cardFile = file;
+        })
+        .catch(() => {});
+}
+
+// Phones with file sharing get the share sheet with the image and the
+// result text; everywhere else the PNG is downloaded.
+async function saveResultImage() {
+    let file = runtime.cardFile;
+    try {
+        if (!file) file = await buildResultCard();
+    } catch {
+        saveImageBtn.textContent = 'Could not make image';
+        return;
+    }
+    const touch = window.matchMedia('(pointer: coarse)').matches;
+    if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const { text, url } = shareContent();
+        try {
+            await navigator.share({ files: [file], title: 'TypeSpeed', text, url });
+        } catch {
+            // Dismissing the share sheet rejects; nothing to report.
+        }
+        return;
+    }
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(file);
+    link.download = file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    saveImageBtn.textContent = 'Image saved';
 }
 
 // --- Challenge Links ---
@@ -2636,6 +2785,7 @@ function init() {
 
     challengeBtn.addEventListener('click', copyChallengeLink);
     replayBtn.addEventListener('click', openReplay);
+    saveImageBtn.addEventListener('click', saveResultImage);
     closeReplayBtn.addEventListener('click', closeReplay);
     replayPauseBtn.addEventListener('click', toggleReplayPause);
     replaySpeed.addEventListener('click', handleReplaySpeedClick);

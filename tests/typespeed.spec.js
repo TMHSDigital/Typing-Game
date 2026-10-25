@@ -4,7 +4,7 @@
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
    getAudioContext, audio, SOUND_PACKS, SOUND_PACK_NAMES, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
-   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily */
+   currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -2101,6 +2101,112 @@ test.describe('replay', () => {
         expect(await page.evaluate(() => runtime.replay.events.length)).toBe(0);
         expect(await page.evaluate(() => runtime.replay.passages.length)).toBe(1);
     });
+});
+
+test.describe('result image', () => {
+    const finishRun = async (page) => {
+        await page.evaluate(() => {
+            gameState.mode = 'words';
+        });
+        await page.locator('#reset-button').click();
+        await input(page).pressSequentially(await currentQuote(page), { delay: 40 });
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+    };
+
+    test('downloads a 1200x630 PNG with the values from the dialog', async ({ page }) => {
+        await page.addInitScript(() => {
+            window.drawnText = [];
+            const fillText = CanvasRenderingContext2D.prototype.fillText;
+            CanvasRenderingContext2D.prototype.fillText = function (value, ...rest) {
+                window.drawnText.push(String(value));
+                return fillText.call(this, value, ...rest);
+            };
+        });
+        await page.goto('/');
+        await finishRun(page);
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#save-image-btn').click(),
+        ]);
+        expect(download.suggestedFilename()).toMatch(/^typespeed-\d{4}-\d{2}-\d{2}\.png$/);
+        await expect(page.locator('#save-image-btn')).toHaveText('Image saved');
+
+        const saved = test.info().outputPath('card.png');
+        await download.saveAs(saved);
+        const png = fs.readFileSync(saved);
+        expect(png.subarray(1, 4).toString()).toBe('PNG');
+        // IHDR: width and height as big-endian 32-bit numbers.
+        expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+
+        const drawn = await page.evaluate(() => window.drawnText);
+        for (const id of ['#result-title', '#modal-wpm', '#modal-accuracy', '#modal-time']) {
+            expect(drawn).toContain(await page.locator(id).textContent());
+        }
+        expect(drawn).toContain(await page.locator('#modal-chars').textContent());
+        expect(drawn).toContain('tmhsdigital.github.io/Typing-Game/');
+    });
+
+    test('goes to the share sheet with the text on phones', async ({ browser }) => {
+        const context = await browser.newContext({ hasTouch: true, isMobile: false });
+        const page = await context.newPage();
+        await page.addInitScript(() => {
+            const coarse = window.matchMedia('(pointer: coarse)');
+            window.matchMedia = (query) =>
+                query === '(pointer: coarse)' ? { ...coarse, matches: true } : coarse;
+            navigator.canShare = (data) => Boolean(data.files);
+            navigator.share = async (data) => {
+                window.sharedData = {
+                    text: data.text,
+                    url: data.url,
+                    files: data.files.map((file) => [file.name, file.type, file.size > 0]),
+                };
+            };
+        });
+        await page.goto('/');
+        await finishRun(page);
+        await page.locator('#save-image-btn').click();
+        await expect.poll(() => page.evaluate(() => window.sharedData)).toBeTruthy();
+        const shared = await page.evaluate(() => window.sharedData);
+        expect(shared.files).toEqual([
+            [expect.stringMatching(/^typespeed-.*\.png$/), 'image/png', true],
+        ]);
+        expect(shared.text).toMatch(/^\d+ WPM, \d+% accuracy/);
+        expect(shared.url).toBe('https://tmhsdigital.github.io/Typing-Game/');
+        await context.close();
+    });
+
+    for (const theme of ['dark', 'light', 'contrast']) {
+        test(`${theme}: the image's text meets 4.5:1 on its background`, async ({ page }) => {
+            await page.addInitScript((value) => {
+                localStorage.setItem('typingGameSettings', JSON.stringify({ theme: value }));
+            }, theme);
+            await page.goto('/');
+            const ratios = await page.evaluate(() => {
+                const palette = cardPalette();
+                // Let a canvas turn each CSS color into RGB.
+                const ctx = document.createElement('canvas').getContext('2d');
+                const rgb = (color) => {
+                    ctx.clearRect(0, 0, 1, 1);
+                    ctx.fillStyle = color;
+                    ctx.fillRect(0, 0, 1, 1);
+                    return Array.from(ctx.getImageData(0, 0, 1, 1).data.slice(0, 3));
+                };
+                const luminance = (color) => {
+                    const [r, g, b] = rgb(color).map((v) => {
+                        const c = v / 255;
+                        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+                    });
+                    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                };
+                const background = luminance(palette.background);
+                return ['text', 'muted', 'accent'].map((name) => {
+                    const fg = luminance(palette[name]);
+                    return (Math.max(fg, background) + 0.05) / (Math.min(fg, background) + 0.05);
+                });
+            });
+            for (const ratio of ratios) expect(ratio).toBeGreaterThanOrEqual(4.5);
+        });
+    }
 });
 
 test.describe('challenge links', () => {
