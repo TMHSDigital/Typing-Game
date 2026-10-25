@@ -2034,6 +2034,75 @@ test.describe('daily', () => {
     });
 });
 
+test.describe('replay', () => {
+    const finishWithTypo = async (page) => {
+        await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ duration: 15 }));
+        });
+        await page.goto('/');
+        await page.clock.pauseAt(new Date('2026-01-01T00:00:10Z'));
+        const quote = await currentQuote(page);
+        const wrong = quote[0] === 'x' ? 'y' : 'x';
+        await input(page).press(wrong); // t = 0
+        await page.clock.runFor(1000);
+        await input(page).press('Backspace'); // t = 1000
+        await page.clock.runFor(1000);
+        await input(page).press(quote[0]); // t = 2000
+        await page.clock.runFor(14000);
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        return { quote, wrong };
+    };
+    const first = (page) => page.locator('#replay-display span').first();
+
+    test('shows the wrong character and its correction at the recorded times', async ({ page }) => {
+        const { wrong } = await finishWithTypo(page);
+        await page.locator('#replay-btn').click();
+        await expect(page.locator('#replay-modal')).toHaveClass(/show/);
+        await expect(page.locator('#replay-pause-btn')).toBeFocused();
+
+        await page.clock.runFor(100);
+        await expect(first(page)).toHaveClass(/incorrect/);
+        expect(await page.evaluate(() => runtime.replay.events[0].value)).toBe(wrong);
+        await page.clock.runFor(1000);
+        await expect(first(page)).not.toHaveClass(/incorrect|correct/);
+        await expect(first(page)).toHaveClass(/current/);
+        await expect(page.locator('#replay-clock')).toHaveText('1.1');
+        await page.clock.runFor(1000);
+        await expect(first(page)).toHaveClass(/correct/);
+        await expect(first(page)).not.toHaveClass(/incorrect/);
+        await expect(page.locator('#replay-pause-btn')).toHaveText('Play again');
+
+        // Escape goes back to the result dialog.
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#replay-modal')).not.toHaveClass(/show/);
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        await expect(page.locator('#replay-btn')).toBeFocused();
+    });
+
+    test('pauses, resumes, and plays at 2x', async ({ page }) => {
+        await finishWithTypo(page);
+        await page.locator('#replay-btn').click();
+        await page.locator('#replay-pause-btn').click();
+        await expect(page.locator('#replay-pause-btn')).toHaveText('Resume');
+        await page.clock.runFor(3000);
+        await expect(first(page)).toHaveClass(/incorrect/);
+
+        await page.locator('#replay-speed .pill', { hasText: '2x' }).click();
+        await page.locator('#replay-pause-btn').click();
+        // 2x: the correction at 1000 ms shows after 500 ms.
+        await page.clock.runFor(600);
+        await expect(first(page)).not.toHaveClass(/incorrect/);
+    });
+
+    test('a new run clears the replay', async ({ page }) => {
+        await finishWithTypo(page);
+        await page.locator('#play-again-btn').click();
+        expect(await page.evaluate(() => runtime.replay.events.length)).toBe(0);
+        expect(await page.evaluate(() => runtime.replay.passages.length)).toBe(1);
+    });
+});
+
 test.describe('challenge links', () => {
     const recordClipboard = () => {
         navigator.clipboard.writeText = async (text) => {

@@ -333,6 +333,9 @@
                 <p class="modal-keys">
                     <span id="modal-keys"></span>
                     <button id="practice-btn" class="link-btn hidden">Practice weak keys</button>
+                    <button id="replay-btn" class="link-btn hidden" aria-haspopup="dialog">
+                        Watch replay
+                    </button>
                 </p>
 
                 <p id="modal-source" class="modal-source hidden"></p>
@@ -386,6 +389,34 @@
                         Copy challenge link
                     </button>
                     <button id="play-again-btn" class="action-btn primary">Play again</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Replay of the finished run, opened from the result dialog -->
+        <div
+            id="replay-modal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="replay-title"
+        >
+            <div class="modal-content replay-content">
+                <h2 id="replay-title">Replay</h2>
+                <p class="replay-clock"><span id="replay-clock">0.0</span>s</p>
+                <div id="replay-display" class="quote-display replay-display"></div>
+                <div class="modal-actions replay-actions">
+                    <div
+                        class="pill-selector compact"
+                        id="replay-speed"
+                        role="group"
+                        aria-label="Replay speed"
+                    >
+                        <button class="pill active" data-value="1" aria-pressed="true">1x</button>
+                        <button class="pill" data-value="2" aria-pressed="false">2x</button>
+                    </div>
+                    <button id="replay-pause-btn" class="action-btn tertiary">Pause</button>
+                    <button id="close-replay-btn" class="action-btn primary">Back to result</button>
                 </div>
             </div>
         </div>

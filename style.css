@@ -1408,6 +1408,39 @@ footer {
     outline-offset: 2px;
 }
 
+/* Replay dialog: the passage as it was typed */
+.replay-content {
+    text-align: left;
+    max-width: 760px;
+}
+
+.modal-content h2#replay-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.replay-clock {
+    font-family: var(--font-code);
+    font-size: 1.5rem;
+    color: var(--accent-secondary);
+    margin-bottom: 1rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.replay-display {
+    min-height: 0;
+    max-height: 50vh;
+    overflow-y: auto;
+    margin-bottom: 1.5rem;
+}
+
+.replay-actions {
+    justify-content: flex-end;
+    align-items: center;
+}
+
 .modal-keys {
     display: flex;
     flex-wrap: wrap;

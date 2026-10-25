@@ -34,6 +34,13 @@ const modalCharsElement = document.getElementById('modal-chars');
 const modalTimeElement = document.getElementById('modal-time');
 const modalKeysElement = document.getElementById('modal-keys');
 const practiceBtn = document.getElementById('practice-btn');
+const replayBtn = document.getElementById('replay-btn');
+const replayModal = document.getElementById('replay-modal');
+const replayClock = document.getElementById('replay-clock');
+const replayDisplay = document.getElementById('replay-display');
+const replaySpeed = document.getElementById('replay-speed');
+const replayPauseBtn = document.getElementById('replay-pause-btn');
+const closeReplayBtn = document.getElementById('close-replay-btn');
 const practiceNote = document.getElementById('practice-note');
 const challengeBtn = document.getElementById('challenge-btn');
 const modalChallengeElement = document.getElementById('modal-challenge');
@@ -300,6 +307,8 @@ const runtime = {
     indent: [], // per character of quoteText: true for indentation Skip indentation fills in
     ghostTimeouts: [],
     grid: [], // {typed, wrong} per GRID_SECONDS of the run, for the daily's share grid
+    replay: { passages: [], events: [] }, // the run's passages and {t, p, value} per input event
+    playback: null, // replay dialog state: {interval, position, last, speed, shown}
     challengeUrl: '', // link for the finished run, built when the result dialog opens
 };
 
@@ -731,6 +740,7 @@ function firstPassageHash(seed, weakKeys) {
 function renderNewQuote() {
     const passage = getPassage();
     runtime.quoteText = passage.text;
+    runtime.replay.passages.push(passage.text);
     runtime.quoteSource = passage.source;
     quoteDisplayElement.textContent = '';
     quoteTextElement.textContent = runtime.quoteText;
@@ -878,6 +888,11 @@ function handleInput() {
     }
     runtime.previousValue = typed;
 
+    runtime.replay.events.push({
+        t: Math.round(performance.now() - runtime.startTime),
+        p: runtime.replay.passages.length - 1,
+        value: typed,
+    });
     runtime.ghostStrokes.push({
         t: Math.round(performance.now() - runtime.startTime),
         i: runtime.quoteBase + typed.length,
@@ -1300,6 +1315,7 @@ function resetGame() {
     if (runtime.challenge && runtime.challenge.used) endChallenge();
     clearInterval(runtime.interval);
     stopGhostPlayback();
+    stopReplay();
     Object.assign(runtime, {
         isStarted: false,
         startTime: 0,
@@ -1318,6 +1334,8 @@ function resetGame() {
         challengeUrl: '',
         textChanged: false,
         grid: [],
+        replay: { passages: [], events: [] },
+        playback: null,
     });
 
     // A challenge on changed text is still played, without a ghost or
@@ -1341,6 +1359,7 @@ function resetGame() {
     settingsModal.classList.remove('show');
     statsModal.classList.remove('show');
     customModal.classList.remove('show');
+    replayModal.classList.remove('show');
 
     updateQuickBar();
     updateHighScoreDisplay();
@@ -1435,6 +1454,7 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
         ? `Most missed keys: ${missed.join(', ')}`
         : 'No missed keys.';
     practiceBtn.classList.toggle('hidden', weakestKeys().length === 0);
+    replayBtn.classList.toggle('hidden', runtime.replay.events.length === 0);
     // A custom text stays on this device, so it cannot be sent as a challenge.
     const canChallenge = elapsed >= 1000 && passageCategory() !== 'custom';
     challengeBtn.classList.toggle('hidden', !canChallenge);
@@ -1466,6 +1486,110 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest }) {
     resultModal.classList.add('show');
     updateFocusHint();
     focusInDialog(playAgainBtn);
+}
+
+// --- Replay ---
+// Plays the finished run back in its own dialog from the input value
+// recorded after every input event, so wrong characters, corrections, and
+// pauses show at the times they happened.
+const REPLAY_STEP = 50; // ms between redraws
+
+function openReplay() {
+    resultModal.classList.remove('show');
+    replayModal.classList.add('show');
+    setActivePill(replaySpeed, '1');
+    // The dialog may still show an earlier run's passage.
+    delete replayDisplay.dataset.passage;
+    runtime.playback = { interval: null, position: 0, last: 0, speed: 1, shown: null };
+    playReplay();
+    focusInDialog(replayPauseBtn);
+}
+
+function closeReplay() {
+    stopReplay();
+    replayModal.classList.remove('show');
+    resultModal.classList.add('show');
+    focusInDialog(replayBtn);
+}
+
+function stopReplay() {
+    if (runtime.playback) clearInterval(runtime.playback.interval);
+}
+
+function playReplay() {
+    const playback = runtime.playback;
+    const events = runtime.replay.events;
+    // Played to the end: start over.
+    if (playback.position > events[events.length - 1].t) {
+        playback.position = 0;
+        playback.shown = null;
+    }
+    playback.last = performance.now();
+    playback.interval = setInterval(stepReplay, REPLAY_STEP);
+    replayPauseBtn.textContent = 'Pause';
+    drawReplay();
+}
+
+function toggleReplayPause() {
+    const playback = runtime.playback;
+    if (playback.interval) {
+        clearInterval(playback.interval);
+        playback.interval = null;
+        replayPauseBtn.textContent = 'Resume';
+    } else {
+        playReplay();
+    }
+}
+
+function stepReplay() {
+    const playback = runtime.playback;
+    const now = performance.now();
+    playback.position += (now - playback.last) * playback.speed;
+    playback.last = now;
+    const events = runtime.replay.events;
+    if (playback.position > events[events.length - 1].t) {
+        clearInterval(playback.interval);
+        playback.interval = null;
+        replayPauseBtn.textContent = 'Play again';
+    }
+    drawReplay();
+}
+
+// Shows the last event at or before the playback position.
+function drawReplay() {
+    const playback = runtime.playback;
+    const { passages, events } = runtime.replay;
+    setText(replayClock, (Math.min(playback.position, elapsedMs()) / 1000).toFixed(1));
+    let index = -1;
+    while (index + 1 < events.length && events[index + 1].t <= playback.position) index++;
+    const event = events[index] || { p: 0, value: '' };
+    const quote = passages[event.p];
+    if (replayDisplay.dataset.passage !== String(event.p)) {
+        playback.shown = null;
+        replayDisplay.textContent = '';
+        for (const character of quote) {
+            const span = document.createElement('span');
+            span.textContent = character === '\n' ? '\u21b5\n' : character;
+            if (character === '\n') span.className = 'newline';
+            replayDisplay.appendChild(span);
+        }
+        replayDisplay.dataset.passage = event.p;
+    }
+    if (index === playback.shown) return;
+    playback.shown = index;
+    replayDisplay.querySelectorAll('span').forEach((span, n) => {
+        const isTyped = n < event.value.length;
+        span.classList.toggle('correct', isTyped && event.value[n] === quote[n]);
+        span.classList.toggle('incorrect', isTyped && event.value[n] !== quote[n]);
+        span.classList.toggle('current', n === event.value.length);
+    });
+}
+
+function handleReplaySpeedClick(e) {
+    const pill = e.target.closest('.pill');
+    if (!pill || !runtime.playback) return;
+    runtime.playback.speed = Number(pill.dataset.value);
+    setActivePill(replaySpeed, pill.dataset.value);
 }
 
 // --- Sharing ---
@@ -2325,7 +2449,9 @@ function isModalOpen(modal) {
 }
 
 function openModal() {
-    return [settingsModal, customModal, statsModal, resultModal].find(isModalOpen) || null;
+    return (
+        [settingsModal, customModal, statsModal, resultModal, replayModal].find(isModalOpen) || null
+    );
 }
 
 // Keep Tab and Shift+Tab inside the open dialog.
@@ -2373,6 +2499,7 @@ function handleKeydown(e) {
         else if (modal === customModal) closeCustomText();
         else if (modal === statsModal) closeStats();
         else if (modal === resultModal) resetGame();
+        else if (modal === replayModal) closeReplay();
         return;
     }
     if (e.key === 'Tab' && modal) {
@@ -2508,6 +2635,10 @@ function init() {
     });
 
     challengeBtn.addEventListener('click', copyChallengeLink);
+    replayBtn.addEventListener('click', openReplay);
+    closeReplayBtn.addEventListener('click', closeReplay);
+    replayPauseBtn.addEventListener('click', toggleReplayPause);
+    replaySpeed.addEventListener('click', handleReplaySpeedClick);
     dailyBtn.addEventListener('click', toggleDaily);
 
     document.addEventListener('keydown', handleKeydown);
