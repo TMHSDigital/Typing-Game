@@ -72,6 +72,8 @@ const closeStatsBtn = document.getElementById('close-stats-btn');
 // Settings inputs
 const themeSelector = document.getElementById('theme-selector');
 const soundToggle = document.getElementById('sound-toggle-settings');
+const soundPackSelect = document.getElementById('sound-pack-select');
+const soundPreviewBtn = document.getElementById('sound-preview-btn');
 const hardModeToggle = document.getElementById('hard-mode-toggle-settings');
 const ghostModeToggle = document.getElementById('ghost-mode-toggle');
 const paceSelect = document.getElementById('pace-select');
@@ -175,6 +177,7 @@ const DEFAULT_SETTINGS = {
     paceWpm: 60, // speed of the pace caret when pace is 'target'
     isHardMode: false,
     isSoundEnabled: true,
+    soundPack: 'tones', // one of SOUND_PACK_NAMES
     hasPunctuation: false, // common words only
     hasNumbers: false, // common words only
     isStopOnError: false, // wrong keys do not advance the caret
@@ -190,6 +193,7 @@ const DEFAULT_SETTINGS = {
 
 const THEMES = ['system', 'dark', 'light', 'contrast'];
 const PACES = ['off', 'target', 'average', 'last'];
+const SOUND_PACK_NAMES = ['tones', 'mechanical', 'typewriter', 'soft']; // keys of SOUND_PACKS
 
 // How the passage looks. Each is set as a data attribute of the same name on
 // <html>, which style.css reads; theme.js does the same before first paint.
@@ -241,6 +245,7 @@ function sanitizeSettings(saved) {
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    if (SOUND_PACK_NAMES.includes(saved.soundPack)) settings.soundPack = saved.soundPack;
     for (const [setting, values] of Object.entries(PASSAGE_STYLES)) {
         if (values.includes(saved[setting])) settings[setting] = saved[setting];
     }
@@ -364,27 +369,92 @@ function currentBest() {
 
 // --- Audio ---
 // Each sound is a recipe: oscillator shape, start and end frequency,
-// duration, and volume. `steps` lists sub-recipes with start offsets in
-// seconds, for sounds made of several notes.
-const SOUNDS = {
-    click: { wave: 'sine', freq: 800, toFreq: 400, duration: 0.05, volume: 0.05, jitter: 0.03 },
-    error: {
-        wave: 'sawtooth',
-        freq: 100,
-        toFreq: 80,
-        slide: 'linear',
-        duration: 0.15,
-        volume: 0.08,
+// duration, and volume. A `noise` recipe plays white noise through a
+// band-pass filter centered on `freq` instead of an oscillator. `steps`
+// lists sub-recipes with start offsets in seconds, for sounds made of
+// several parts. Each pack has a click, an error, and a success sound.
+const chord = (freqs, gap, recipe) => freqs.map((freq, i) => ({ at: i * gap, freq, ...recipe }));
+
+const SOUND_PACKS = {
+    tones: {
+        click: { wave: 'sine', freq: 800, toFreq: 400, duration: 0.05, volume: 0.05, jitter: 0.03 },
+        error: {
+            wave: 'sawtooth',
+            freq: 100,
+            toFreq: 80,
+            slide: 'linear',
+            duration: 0.15,
+            volume: 0.08,
+        },
+        // C5, E5, G5, C6
+        success: {
+            steps: chord([523.25, 659.25, 783.99, 1046.5], 0.1, {
+                wave: 'sine',
+                duration: 0.5,
+                volume: 0.05,
+            }),
+        },
     },
-    // C5, E5, G5, C6
-    success: {
-        steps: [523.25, 659.25, 783.99, 1046.5].map((freq, i) => ({
-            at: i * 0.1,
-            wave: 'sine',
-            freq,
-            duration: 0.5,
-            volume: 0.05,
-        })),
+    // A switch: a short high click and a low thump as the key bottoms out.
+    mechanical: {
+        click: {
+            steps: [
+                { noise: true, freq: 4000, duration: 0.025, volume: 0.25, jitter: 0.1 },
+                { wave: 'sine', freq: 180, toFreq: 70, duration: 0.05, volume: 0.06, jitter: 0.05 },
+            ],
+        },
+        error: {
+            steps: [
+                { noise: true, freq: 1200, duration: 0.05, volume: 0.25 },
+                { wave: 'square', freq: 110, toFreq: 70, duration: 0.12, volume: 0.04 },
+            ],
+        },
+        success: {
+            steps: [
+                ...[0, 0.08, 0.16].map((at) => ({
+                    at,
+                    noise: true,
+                    freq: 4000,
+                    duration: 0.025,
+                    volume: 0.25,
+                })),
+                { at: 0.3, wave: 'sine', freq: 880, duration: 0.4, volume: 0.04 },
+            ],
+        },
+    },
+    // A typebar strike, a dull clunk for a mistake, and the carriage bell.
+    typewriter: {
+        click: {
+            steps: [
+                { noise: true, freq: 2200, duration: 0.04, volume: 0.3, jitter: 0.1 },
+                { wave: 'triangle', freq: 1400, toFreq: 900, duration: 0.02, volume: 0.03 },
+            ],
+        },
+        error: {
+            steps: [
+                { noise: true, freq: 600, duration: 0.08, volume: 0.3 },
+                { wave: 'triangle', freq: 90, toFreq: 60, duration: 0.1, volume: 0.06 },
+            ],
+        },
+        success: {
+            steps: [
+                { wave: 'sine', freq: 2093, duration: 0.9, volume: 0.06 },
+                { wave: 'sine', freq: 4186, duration: 0.5, volume: 0.02 },
+            ],
+        },
+    },
+    // Quiet, low, and rounded.
+    soft: {
+        click: { wave: 'sine', freq: 420, toFreq: 300, duration: 0.04, volume: 0.03, jitter: 0.05 },
+        error: { wave: 'triangle', freq: 200, toFreq: 160, duration: 0.12, volume: 0.05 },
+        // C4, E4, G4
+        success: {
+            steps: chord([261.63, 329.63, 392], 0.12, {
+                wave: 'triangle',
+                duration: 0.5,
+                volume: 0.04,
+            }),
+        },
     },
 };
 
@@ -394,7 +464,7 @@ const GAIN_FLOOR = 0.0001; // exponential ramps cannot reach 0
 // The context is created on the first sound, after a keystroke, so the
 // browser does not start it suspended. Every voice goes through one master
 // gain node. If Web Audio is missing or blocked, sounds are skipped.
-const audio = { context: null, master: null, failed: false, voices: [] };
+const audio = { context: null, master: null, failed: false, voices: [], noise: null };
 
 function getAudioContext() {
     if (audio.failed) return null;
@@ -414,51 +484,87 @@ function getAudioContext() {
     return audio.context;
 }
 
+// Half a second of white noise, made once and shared by every noise voice.
+function noiseBuffer(ctx) {
+    if (!audio.noise) {
+        audio.noise = ctx.createBuffer(1, Math.round(ctx.sampleRate / 2), ctx.sampleRate);
+        const samples = audio.noise.getChannelData(0);
+        for (let n = 0; n < samples.length; n++) samples[n] = Math.random() * 2 - 1;
+    }
+    return audio.noise;
+}
+
 function playVoice(ctx, recipe, at) {
     while (audio.voices.length >= MAX_VOICES) audio.voices.shift().stop();
 
     // A few percent of random pitch keeps repeated clicks from sounding identical.
     const jitter = recipe.jitter ? 1 + (Math.random() * 2 - 1) * recipe.jitter : 1;
     const duration = recipe.duration > 0 ? recipe.duration : 0.1;
-    const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
     gain.connect(audio.master);
-    osc.type = recipe.wave || 'square';
-    osc.frequency.setValueAtTime(Math.max(recipe.freq * jitter, 1), at);
+    // `pitch` is the oscillator's frequency, or for noise the filter's center.
+    let source;
+    let pitch;
+    const nodes = [gain];
+    if (recipe.noise) {
+        source = ctx.createBufferSource();
+        source.buffer = noiseBuffer(ctx);
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        source.connect(filter);
+        filter.connect(gain);
+        pitch = filter.frequency;
+        nodes.push(filter);
+    } else {
+        source = ctx.createOscillator();
+        source.type = recipe.wave || 'square';
+        source.connect(gain);
+        pitch = source.frequency;
+    }
+    nodes.push(source);
+    pitch.setValueAtTime(Math.max(recipe.freq * jitter, 1), at);
     if (recipe.toFreq !== undefined) {
         const target = Math.max(recipe.toFreq * jitter, 1);
-        if (recipe.slide === 'linear') osc.frequency.linearRampToValueAtTime(target, at + duration);
-        else osc.frequency.exponentialRampToValueAtTime(target, at + duration);
+        if (recipe.slide === 'linear') pitch.linearRampToValueAtTime(target, at + duration);
+        else pitch.exponentialRampToValueAtTime(target, at + duration);
     }
     gain.gain.setValueAtTime(Math.max(recipe.volume ?? 0.08, GAIN_FLOOR), at);
     gain.gain.exponentialRampToValueAtTime(GAIN_FLOOR, at + duration);
-    osc.start(at);
-    osc.stop(at + duration);
+    source.start(at);
+    source.stop(at + duration);
 
-    audio.voices.push(osc);
-    osc.onended = () => {
-        osc.disconnect();
-        gain.disconnect();
-        const index = audio.voices.indexOf(osc);
+    audio.voices.push(source);
+    source.onended = () => {
+        nodes.forEach((node) => node.disconnect());
+        const index = audio.voices.indexOf(source);
         if (index !== -1) audio.voices.splice(index, 1);
     };
 }
 
-// Fire and forget: never throws, and returns before touching Web Audio when
-// sound is off.
-function playSound(name) {
-    if (!gameState.isSoundEnabled) return;
-    const recipe = SOUNDS[name];
-    if (!recipe) return;
+// Plays the current pack's sound `delay` seconds from now. Never throws.
+function playRecipe(name, delay = 0) {
+    const recipe = SOUND_PACKS[gameState.soundPack][name];
     const ctx = getAudioContext();
-    if (!ctx) return;
+    if (!recipe || !ctx) return;
     try {
-        const now = ctx.currentTime;
+        const now = ctx.currentTime + delay;
         for (const step of recipe.steps || [recipe]) playVoice(ctx, step, now + (step.at || 0));
     } catch {
         // A failed sound must not interrupt typing.
     }
+}
+
+// Fire and forget: returns before touching Web Audio when sound is off.
+function playSound(name) {
+    if (gameState.isSoundEnabled) playRecipe(name);
+}
+
+// The Play button in Settings: a few keys, a mistake, and the end of a run,
+// whether or not sound is on.
+function previewSoundPack() {
+    [0, 0.15, 0.3].forEach((delay) => playRecipe('click', delay));
+    playRecipe('error', 0.5);
+    playRecipe('success', 0.9);
 }
 
 // --- Random ---
@@ -1737,6 +1843,7 @@ function applySettingsToUI() {
     setActivePill(themeSelector, gameState.theme);
     categorySelect.value = gameState.category;
     soundToggle.checked = gameState.isSoundEnabled;
+    soundPackSelect.value = gameState.soundPack;
     hardModeToggle.checked = gameState.isHardMode;
     ghostModeToggle.checked = gameState.isGhostEnabled;
     paceSelect.value = gameState.pace;
@@ -2333,6 +2440,10 @@ function init() {
     soundToggle.addEventListener('change', (e) => {
         gameState.isSoundEnabled = e.target.checked;
     });
+    soundPackSelect.addEventListener('change', (e) => {
+        gameState.soundPack = e.target.value;
+    });
+    soundPreviewBtn.addEventListener('click', previewSoundPack);
     hardModeToggle.addEventListener('change', (e) => {
         gameState.isHardMode = e.target.checked;
         quoteDisplayElement.classList.toggle('blurred', gameState.isHardMode);

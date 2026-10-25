@@ -3,7 +3,7 @@
 /* global runtime, gameState, resultModal, typingInputElement, wpmElement, updateMetrics,
    getPassage, settingsKey, COMMON_WORDS, QUOTES, renderNewQuote, parseChallenge,
    decodeChallenge, encodeChallenge, normalizeCustomText, CODE_SNIPPETS, playSound, playVoice,
-   getAudioContext, audio, SOUNDS, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
+   getAudioContext, audio, SOUND_PACKS, SOUND_PACK_NAMES, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
    currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily */
 
 const { test, expect } = require('@playwright/test');
@@ -895,6 +895,7 @@ test.describe('sound', () => {
                 this.state = 'running';
                 this.currentTime = 0;
                 this.destination = {};
+                this.sampleRate = 44100;
             }
             createOscillator() {
                 calls.tones++;
@@ -910,6 +911,25 @@ test.describe('sound', () => {
             }
             createGain() {
                 return { gain: param(), connect() {}, disconnect() {} };
+            }
+            createBufferSource() {
+                calls.tones++;
+                calls.noise = (calls.noise || 0) + 1;
+                return {
+                    connect() {},
+                    disconnect() {},
+                    start() {},
+                    stop() {
+                        calls.stopped++;
+                    },
+                };
+            }
+            createBiquadFilter() {
+                return { frequency: param(), connect() {}, disconnect() {} };
+            }
+            createBuffer(channels, length) {
+                const data = new Float32Array(length);
+                return { getChannelData: () => data };
             }
             resume() {
                 return Promise.resolve();
@@ -965,8 +985,12 @@ test.describe('sound', () => {
         await page.addInitScript(stubAudio);
         await page.goto('/');
         const result = await page.evaluate(() => {
-            const steps = Object.values(SOUNDS).flatMap((recipe) => recipe.steps || [recipe]);
-            const valid = steps.every((step) => step.freq > 0 && step.duration > 0);
+            const packs = Object.values(SOUND_PACKS);
+            const complete = packs.every((pack) => pack.click && pack.error && pack.success);
+            const steps = packs
+                .flatMap((pack) => Object.values(pack))
+                .flatMap((recipe) => recipe.steps || [recipe]);
+            const valid = complete && steps.every((step) => step.freq > 0 && step.duration > 0);
             // A recipe sliding to 0 Hz at volume 0 must not throw or ramp to 0.
             getAudioContext();
             window.audioCalls.rampTargets = [];
@@ -976,6 +1000,42 @@ test.describe('sound', () => {
         expect(result.valid).toBe(true);
         expect(result.targets.length).toBeGreaterThan(0);
         for (const value of result.targets) expect(value).toBeGreaterThan(0);
+    });
+
+    test('the sound set is saved, used after a reload, and previewed with sound off', async ({
+        page,
+    }) => {
+        await page.addInitScript(stubAudio);
+        await page.goto('/');
+        expect(await page.evaluate(() => SOUND_PACK_NAMES)).toEqual(
+            await page.evaluate(() => Object.keys(SOUND_PACKS))
+        );
+        await page.locator('#settings-btn').click();
+        await page.locator('#sound-pack-select').selectOption('mechanical');
+        await page.locator('label', { hasText: 'Sound effects' }).click();
+        await page.locator('#sound-preview-btn').click();
+        // Three clicks, an error, and the success sound, all of two parts or more.
+        expect(await page.evaluate(() => window.audioCalls.noise)).toBe(3 + 1 + 3);
+        await page.locator('#close-settings-btn').click();
+
+        await page.reload();
+        await expect(page.locator('#sound-pack-select')).toHaveValue('mechanical');
+        await page.evaluate(() => {
+            gameState.isSoundEnabled = true;
+        });
+        await input(page).press((await currentQuote(page))[0]);
+        // The mechanical click: one noise burst and one oscillator.
+        expect(
+            await page.evaluate(() => [window.audioCalls.noise, window.audioCalls.tones])
+        ).toEqual([1, 2]);
+    });
+
+    test('an unknown sound set falls back to Tones', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ soundPack: 'kazoo' }));
+        });
+        await page.goto('/');
+        expect(await page.evaluate(() => gameState.soundPack)).toBe('tones');
     });
 
     test('a missing or blocked AudioContext is skipped without errors', async ({ page }) => {
