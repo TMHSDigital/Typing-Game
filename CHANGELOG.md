@@ -2,6 +2,14 @@
 
 Each release lists the changes people using the site can see. The version is `VERSION` in `script.js`; the footer shows it.
 
+## Unreleased
+
+- Books: six public-domain books, typed a page at a time, continuing where you stopped.
+- Lessons: six stages from the home row to numbers, each unlocked by passing the one before.
+- Common Words in Spanish, French, and Portuguese. An accent typed with a dead key counts with its letter.
+- Keyboard layout emulation: Colemak, Colemak-DH, Dvorak, and Workman on any physical keyboard.
+- Your code: type code pasted or loaded from a file, with its line breaks and indentation.
+
 ## 1.1.0 (2026-10-25)
 
 - Daily: one 30-second passage a day, the same for everyone, shared as a line and a grid.

@@ -60,7 +60,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html theme.js texts.js wordlists.js script.js style.css sw.js manifest.webmanifest preview.png robots.txt _site/
-          cp -r fonts icons _site/
+          cp -r fonts icons books _site/
 
       - uses: actions/upload-pages-artifact@v5
         with:

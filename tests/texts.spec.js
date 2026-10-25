@@ -92,3 +92,21 @@ test('code snippets are typable, unique, and fit the line limits', () => {
     }
     expect(problems).toEqual([]);
 });
+
+test('every book page can be typed and fits on a page', () => {
+    const dir = path.join(__dirname, '..', 'books');
+    const problems = [];
+    for (const file of fs.readdirSync(dir)) {
+        const book = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+        if (book.chapters.length === 0) problems.push(`${file}: no chapters`);
+        book.chapters.forEach((chapter, n) => {
+            if (chapter.pages.length === 0) problems.push(`${file} #${n + 1}: no pages`);
+            for (const page of chapter.pages) {
+                if (!/^[ -~\n]+$/.test(page) || page.length > 700 || page !== page.trim()) {
+                    problems.push(`${file} #${n + 1}: ${page.slice(0, 40)}`);
+                }
+            }
+        });
+    }
+    expect(problems).toEqual([]);
+});

@@ -6,7 +6,7 @@
    getAudioContext, audio, SOUND_PACKS, SOUND_PACK_NAMES, timerElement, tick, quoteDisplayElement, bests, bestStrokes,
    currentBest, validBests, currentStreak, runHistory, firstPassageHash, textHash, validDaily, cardPalette, VERSION,
    weakestKeys, keyStats, endGame, LESSON_STAGES, lessonText, seededRandom,
-   WORD_LISTS, typingInputElement */
+   WORD_LISTS, typingInputElement, validBooks */
 
 const { test, expect } = require('@playwright/test');
 const { default: AxeBuilder } = require('@axe-core/playwright');
@@ -2358,14 +2358,14 @@ test.describe('lessons', () => {
 
         // Too many mistakes: no pass.
         await typeStage(page, { wrong: 5 });
-        await expect(page.locator('#modal-lesson')).toHaveText(
+        await expect(page.locator('#modal-progress')).toHaveText(
             /^Stage 1 needs 95% accuracy and 20 WPM; this run had \d+% and \d+ WPM\.$/
         );
         await page.locator('#play-again-btn').click();
         await expect(page.locator('#lesson-select option[value="2"]')).toBeDisabled();
 
         await typeStage(page);
-        await expect(page.locator('#modal-lesson')).toHaveText(
+        await expect(page.locator('#modal-progress')).toHaveText(
             'Stage 1 passed. Stage 2, Top row, is unlocked.'
         );
         await expect(page.locator('#result-title')).toHaveText('10 words · Lessons, stage 1');
@@ -2470,6 +2470,89 @@ test.describe('word languages', () => {
             })
         );
         expect(parsed.settings.wordLanguage).toBe('fr');
+    });
+});
+
+test.describe('books', () => {
+    const alice = JSON.parse(fs.readFileSync('books/alice.json', 'utf8'));
+
+    test('a typed page moves the book on, and a reload resumes at the next page', async ({
+        page,
+    }) => {
+        await page.goto('/');
+        await page.locator('#category-select').selectOption('books');
+        await expect(page.locator('#book-select')).toHaveValue('alice');
+        await expect(page.locator('#quick-mode')).toBeHidden();
+        const pages = alice.chapters[0].pages;
+        await expect(page.locator('#practice-note')).toHaveText(
+            `Chapter I, page 1 of ${pages.length}`
+        );
+        expect(await currentQuote(page)).toBe(pages[0]);
+
+        await input(page).pressSequentially(pages[0]);
+        await expect(page.locator('#result-modal')).toHaveClass(/show/);
+        await expect(page.locator('#modal-progress')).toHaveText(
+            `Chapter I, page 1 of ${pages.length} done.`
+        );
+        await expect(page.locator('#result-title')).toHaveText("Alice's Adventures in Wonderland");
+        await expect(page.locator('#challenge-btn')).toBeHidden();
+        expect(await page.evaluate(() => Object.keys(bests))).toEqual([]);
+
+        await page.reload();
+        await expect(page.locator('#practice-note')).toHaveText(
+            `Chapter I, page 2 of ${pages.length}`
+        );
+        expect(await currentQuote(page)).toBe(pages[1]);
+        expect(
+            await page.evaluate(() => JSON.parse(localStorage.getItem('typingGameBooks')))
+        ).toEqual({ alice: { chapter: 0, page: 1 } });
+    });
+
+    test('the last page of a chapter leads to the next chapter', async ({ page }) => {
+        const last = alice.chapters[0].pages.length - 1;
+        await page.addInitScript((pageIndex) => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ category: 'books' }));
+            localStorage.setItem(
+                'typingGameBooks',
+                JSON.stringify({ alice: { chapter: 0, page: pageIndex } })
+            );
+        }, last);
+        await page.goto('/');
+        await expect.poll(() => currentQuote(page)).toBe(alice.chapters[0].pages[last]);
+        await input(page).pressSequentially(alice.chapters[0].pages[last]);
+        await expect(page.locator('#modal-progress')).toHaveText(
+            `Chapter I, page ${last + 1} of ${last + 1} done. Next: Chapter II.`
+        );
+    });
+
+    test('a book that does not load says so, and Restart tries again', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('typingGameSettings', JSON.stringify({ category: 'books' }));
+        });
+        await page.route('**/books/*.json', (route) => route.abort());
+        await page.goto('/');
+        await expect(page.locator('#practice-note')).toHaveText(
+            'Could not load this book. Check the connection and press Restart.'
+        );
+        await expect(input(page)).toBeDisabled();
+
+        await page.unroute('**/books/*.json');
+        await page.locator('#reset-button').click();
+        await expect.poll(() => currentQuote(page)).toBe(alice.chapters[0].pages[0]);
+        await expect(input(page)).toBeEnabled();
+    });
+
+    test('import keeps only positions of known books', async ({ page }) => {
+        await page.goto('/');
+        const result = await page.evaluate(() =>
+            validBooks({
+                alice: { chapter: 2, page: 5 },
+                pride: { chapter: -1, page: 0 },
+                unknown: { chapter: 0, page: 0 },
+                carol: { chapter: '1', page: 0 },
+            })
+        );
+        expect(result).toEqual({ alice: { chapter: 2, page: 5 } });
     });
 });
 

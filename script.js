@@ -49,7 +49,7 @@ const closeReplayBtn = document.getElementById('close-replay-btn');
 const practiceNote = document.getElementById('practice-note');
 const challengeBtn = document.getElementById('challenge-btn');
 const modalChallengeElement = document.getElementById('modal-challenge');
-const modalLessonElement = document.getElementById('modal-lesson');
+const modalProgressElement = document.getElementById('modal-progress');
 const dailyBtn = document.getElementById('daily-btn');
 const challengeLinkRow = document.getElementById('challenge-link-row');
 const challengeLinkInput = document.getElementById('challenge-link');
@@ -115,6 +115,7 @@ const wordLanguageSelect = document.getElementById('word-language-select');
 const autoIndentOption = document.getElementById('auto-indent-option');
 const codeLanguageSelect = document.getElementById('code-language-select');
 const lessonSelect = document.getElementById('lesson-select');
+const bookSelect = document.getElementById('book-select');
 const capsWarning = document.getElementById('caps-warning');
 const ghostStatus = document.getElementById('ghost-status');
 
@@ -133,6 +134,7 @@ const STORAGE_KEYS = {
     keyStats: 'typingGameKeyStats',
     daily: 'typingGameDaily',
     lessons: 'typingGameLessons',
+    books: 'typingGameBooks',
 };
 
 function loadJSON(key, fallback) {
@@ -218,6 +220,7 @@ const DEFAULT_SETTINGS = {
     caretStyle: 'underline',
     lastSeenVersion: '', // VERSION when the page was last opened
     lessonStage: 1, // stage number in the Lessons category, from 1
+    bookId: 'alice', // id in BOOKS, for the Books category
 };
 
 const THEMES = ['system', 'dark', 'light', 'contrast'];
@@ -236,6 +239,19 @@ const LESSON_STAGES = [
     { name: 'Numbers', letters: ALL_LETTERS, punctuation: true, numbers: true },
 ];
 const LESSON_PASS = { accuracy: 95, wpm: 20 };
+
+// --- Books ---
+// Public-domain books in books/<id>.json, built by scripts/build-books.mjs
+// as chapters of pages. A Books run is one page; the next run continues
+// with the next page. The files load from the site when a book is picked.
+const BOOKS = [
+    { id: 'alice', title: "Alice's Adventures in Wonderland", author: 'Lewis Carroll' },
+    { id: 'carol', title: 'A Christmas Carol', author: 'Charles Dickens' },
+    { id: 'time-machine', title: 'The Time Machine', author: 'H. G. Wells' },
+    { id: 'sherlock', title: 'The Adventures of Sherlock Holmes', author: 'Arthur Conan Doyle' },
+    { id: 'frankenstein', title: 'Frankenstein', author: 'Mary Shelley' },
+    { id: 'pride', title: 'Pride and Prejudice', author: 'Jane Austen' },
+];
 
 // --- Layouts ---
 // Each layout as the characters on the physical keys of a US keyboard, row
@@ -294,7 +310,7 @@ function textHash(text) {
     return hash.toString(36);
 }
 
-const CATEGORIES = ['common', 'weak', 'lessons', 'custom', 'code', ...Object.keys(QUOTES)];
+const CATEGORIES = ['common', 'weak', 'lessons', 'books', 'custom', 'code', ...Object.keys(QUOTES)];
 const OWN_CODE = 'own';
 const CODE_LANGUAGES = [...Object.keys(CODE_SNIPPETS), OWN_CODE];
 const OWN_CODE_LIMIT = 20000; // characters
@@ -349,8 +365,11 @@ const codeSnippets = () =>
     codeLanguage() === OWN_CODE ? ownCodeChunks(gameState.ownCode) : CODE_SNIPPETS[codeLanguage()];
 
 // Custom text and your own code stay on this device: no challenge links.
+// Books pages are not drawn from a seed, so they cannot be either.
 const isLocalText = () =>
-    passageCategory() === 'custom' || (passageCategory() === 'code' && codeLanguage() === OWN_CODE);
+    passageCategory() === 'custom' ||
+    passageCategory() === 'books' ||
+    (passageCategory() === 'code' && codeLanguage() === OWN_CODE);
 
 function sanitizeSettings(saved) {
     const settings = { ...DEFAULT_SETTINGS };
@@ -362,6 +381,7 @@ function sanitizeSettings(saved) {
     if (CODE_LANGUAGES.includes(saved.codeLanguage)) settings.codeLanguage = saved.codeLanguage;
     if (THEMES.includes(saved.theme)) settings.theme = saved.theme;
     if (PACES.includes(saved.pace)) settings.pace = saved.pace;
+    if (BOOKS.some((book) => book.id === saved.bookId)) settings.bookId = saved.bookId;
     if (Object.hasOwn(WORD_LISTS, saved.wordLanguage)) settings.wordLanguage = saved.wordLanguage;
     if (Number.isInteger(saved.lessonStage) && LESSON_STAGES[saved.lessonStage - 1]) {
         settings.lessonStage = saved.lessonStage;
@@ -433,6 +453,8 @@ const runtime = {
     playback: null, // replay dialog state: {interval, position, last, speed, shown}
     cardFile: null, // result image File, built when the result dialog opens
     challengeUrl: '', // link for the finished run, built when the result dialog opens
+    books: {}, // book files loaded so far, by id; kept across resets
+    bookError: '', // id of a book that could not be loaded
 };
 
 const HISTORY_LIMIT = 500;
@@ -449,6 +471,9 @@ if (!bests || typeof bests !== 'object' || Array.isArray(bests)) bests = {};
 // Attempts and misses per expected character across all recorded runs.
 let keyStats = loadJSON(STORAGE_KEYS.keyStats, {});
 if (!keyStats || typeof keyStats !== 'object' || Array.isArray(keyStats)) keyStats = {};
+
+// Where each book continues: { [book id]: { chapter, page } }, from 0.
+let bookProgress = validBooks(loadJSON(STORAGE_KEYS.books, null));
 
 // The highest lesson stage unlocked: { unlocked }.
 let lessonProgress = validLessons(loadJSON(STORAGE_KEYS.lessons, null));
@@ -499,7 +524,11 @@ function passageCategory() {
 
 // Runs only compete with runs of the same mode, length, category, and
 // rules. The defaults (Stop on error off, Skip indentation on) add nothing.
+// Books runs end with the page, whatever the mode.
+const isTimed = () => gameState.mode === 'time' && gameState.category !== 'books';
+
 function settingsKey() {
+    if (gameState.category === 'books') return `page:book:books-${gameState.bookId}`;
     const length = gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount}w`;
     let category = passageCategory();
     if (category === 'custom') category = `custom-${textHash(gameState.customText)}`;
@@ -822,6 +851,79 @@ function lessonText(count) {
         .join(' ');
 }
 
+// The page the current book continues at, or an empty passage while the
+// file loads (or failed to load).
+function bookPage() {
+    const book = runtime.books[gameState.bookId];
+    if (!book) return { text: '', source: '' };
+    const { chapter, page } = bookPosition(book);
+    const info = BOOKS.find((entry) => entry.id === gameState.bookId);
+    return {
+        text: book.chapters[chapter].pages[page],
+        source: `${info.title} by ${info.author}, ${book.chapters[chapter].title}`,
+    };
+}
+
+// The stored position, if it still exists in the book.
+function bookPosition(book) {
+    const saved = bookProgress[book.id];
+    if (saved && book.chapters[saved.chapter]?.pages[saved.page] !== undefined) return saved;
+    return { chapter: 0, page: 0 };
+}
+
+// On failure the note says so; Restart tries again.
+async function loadBook(id) {
+    runtime.bookError = '';
+    try {
+        const response = await fetch(`books/${id}.json`);
+        if (!response.ok) throw new Error(response.statusText);
+        runtime.books[id] = await response.json();
+    } catch {
+        runtime.bookError = id;
+        updateQuickBar();
+        return;
+    }
+    if (gameState.category === 'books' && gameState.bookId === id && !runtime.isStarted) {
+        resetGame();
+    }
+}
+
+// After a finished page: move on, to the next chapter at its end and back
+// to the start after the last page. Returns what the result dialog says.
+function advanceBook() {
+    const book = runtime.books[gameState.bookId];
+    const { chapter, page } = bookPosition(book);
+    const pages = book.chapters[chapter].pages.length;
+    let next = { chapter, page: page + 1 };
+    let note = `${book.chapters[chapter].title}, page ${page + 1} of ${pages} done.`;
+    if (next.page === pages) {
+        next = { chapter: chapter + 1, page: 0 };
+        if (next.chapter === book.chapters.length) {
+            next = { chapter: 0, page: 0 };
+            note += ' That is the end of the book; the next run starts it again.';
+        } else {
+            note += ` Next: ${book.chapters[next.chapter].title}.`;
+        }
+    }
+    bookProgress[book.id] = next;
+    saveJSON(STORAGE_KEYS.books, bookProgress);
+    return note;
+}
+
+function validBooks(data) {
+    const result = {};
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return result;
+    for (const book of BOOKS) {
+        const saved = data[book.id];
+        if (saved && Number.isInteger(saved.chapter) && Number.isInteger(saved.page)) {
+            if (saved.chapter >= 0 && saved.page >= 0) {
+                result[book.id] = { chapter: saved.chapter, page: saved.page };
+            }
+        }
+    }
+    return result;
+}
+
 function validLessons(data) {
     const unlocked = data && data.unlocked;
     return {
@@ -886,6 +988,7 @@ function getPassage() {
         const count = gameState.mode === 'words' ? gameState.wordCount : COMMON_CHUNK;
         return { text: lessonText(count), source: '' };
     }
+    if (gameState.category === 'books') return bookPage();
     if (gameState.category === 'code') {
         const snippets = codeSnippets();
         if (gameState.mode !== 'words') return { text: pickQuote(snippets).join('\n'), source: '' };
@@ -1021,7 +1124,7 @@ function handleInput(e) {
 
     // The interval checks the clock only every 250 ms. Input that arrives
     // after the deadline ends the run instead of counting toward it.
-    if (gameState.mode === 'time' && elapsedMs() >= gameState.duration * 1000) {
+    if (isTimed() && elapsedMs() >= gameState.duration * 1000) {
         endGame(runtime.startTime + gameState.duration * 1000);
         return;
     }
@@ -1141,7 +1244,7 @@ function handleInput(e) {
     updateMetrics();
 
     if (typed.length === quote.length) {
-        if (gameState.mode === 'time') {
+        if (isTimed()) {
             // Keep going until the clock runs out.
             runtime.baseCorrect += correctCount;
             runtime.baseTyped += countedTyped;
@@ -1181,7 +1284,7 @@ function startGame() {
     runtime.endTime = 0;
     containerElement.classList.add('focus-mode');
 
-    runtime.timer = gameState.mode === 'time' ? gameState.duration : 0;
+    runtime.timer = isTimed() ? gameState.duration : 0;
     timerElement.textContent = runtime.timer;
     runtime.interval = setInterval(tick, 250);
 
@@ -1200,7 +1303,7 @@ function startGame() {
 
 function tick() {
     const elapsedSeconds = Math.floor(elapsedMs() / 1000);
-    if (gameState.mode === 'time') {
+    if (isTimed()) {
         runtime.timer = Math.max(0, gameState.duration - elapsedSeconds);
         setText(timerElement, runtime.timer);
         if (elapsedMs() >= gameState.duration * 1000) {
@@ -1314,10 +1417,9 @@ function paceSpeed() {
 // At five characters a word, character i is reached at i * 12000 / wpm ms.
 // Time mode covers the whole duration, Words mode the passage.
 function paceStrokes(wpm) {
-    const count =
-        gameState.mode === 'time'
-            ? Math.ceil((gameState.duration * wpm * 5) / 60)
-            : runtime.quoteText.length;
+    const count = isTimed()
+        ? Math.ceil((gameState.duration * wpm * 5) / 60)
+        : runtime.quoteText.length;
     return Array.from({ length: count }, (_, n) => ({ t: ((n + 1) * 12000) / wpm, i: n + 1 }));
 }
 
@@ -1381,7 +1483,9 @@ function endGame(endTime = performance.now()) {
     const { wpm, accuracy } = updateMetrics();
     const previousBest = currentBest();
     let isNewBest = false;
-    let lesson = '';
+    let progress = '';
+    // A finished page moves the book on, however long it took.
+    if (gameState.category === 'books') progress = advanceBook();
 
     // Runs under a second have no meaningful WPM. Show them, but do not record them.
     if (elapsedMs() >= 1000) {
@@ -1390,7 +1494,7 @@ function endGame(endTime = performance.now()) {
             wpm,
             accuracy,
             date: new Date().toISOString(),
-            mode: gameState.mode,
+            mode: isTimed() ? 'time' : 'words',
             key,
         });
         runHistory.length = Math.min(runHistory.length, HISTORY_LIMIT);
@@ -1405,7 +1509,7 @@ function endGame(endTime = performance.now()) {
         }
         saveJSON(STORAGE_KEYS.keyStats, keyStats);
 
-        if (gameState.category === 'lessons') lesson = recordLesson(wpm, accuracy);
+        if (gameState.category === 'lessons') progress = recordLesson(wpm, accuracy);
 
         // Only the first daily run of the day is the day's result.
         const daily = runtime.challenge && runtime.challenge.daily;
@@ -1418,7 +1522,8 @@ function endGame(endTime = performance.now()) {
             runtime.challenge.recorded = true;
         }
 
-        if (wpm > (previousBest ? previousBest.wpm : 0)) {
+        // Each page is new text, so books keep no best to race.
+        if (gameState.category !== 'books' && wpm > (previousBest ? previousBest.wpm : 0)) {
             bests[key] = {
                 wpm,
                 keystrokes: encodeStrokes(runtime.ghostStrokes),
@@ -1436,7 +1541,7 @@ function endGame(endTime = performance.now()) {
     renderChart();
     renderRunChart();
     updateQuickBar();
-    showResultModal(wpm, accuracy, { isNewBest, previousBest, lesson });
+    showResultModal(wpm, accuracy, { isNewBest, previousBest, progress });
 }
 
 function renderChart() {
@@ -1562,7 +1667,7 @@ function resetGame() {
     runtime.weakKeys = replayedWeakKeys(replay);
     lastQuoteIndex = -1;
 
-    runtime.timer = gameState.mode === 'time' ? gameState.duration : 0;
+    runtime.timer = isTimed() ? gameState.duration : 0;
     timerElement.textContent = runtime.timer;
     wpmElement.textContent = 0;
     accuracyElement.textContent = 100;
@@ -1579,7 +1684,11 @@ function resetGame() {
 
     updateQuickBar();
     updateHighScoreDisplay();
+    const book = gameState.category === 'books' && runtime.books[gameState.bookId];
+    if (gameState.category === 'books' && !book) loadBook(gameState.bookId);
     renderNewQuote();
+    // Nothing to type until the book has loaded.
+    if (gameState.category === 'books' && !book) typingInputElement.disabled = true;
     runtime.passageHash = textHash(runtime.quoteText);
     updateGhostStatus();
     typingInputElement.focus();
@@ -1591,8 +1700,13 @@ function updateQuickBar() {
     setActivePill(quickMode, gameState.mode);
     setActivePill(quickDuration, String(gameState.duration));
     setActivePill(quickWordCount, String(gameState.wordCount));
-    quickDuration.classList.toggle('hidden', gameState.mode !== 'time');
-    quickWordCount.classList.toggle('hidden', gameState.mode !== 'words');
+    // A Books run is a page, so mode and length do not apply.
+    const books = gameState.category === 'books';
+    quickMode.classList.toggle('hidden', books);
+    quickDuration.classList.toggle('hidden', books || gameState.mode !== 'time');
+    quickWordCount.classList.toggle('hidden', books || gameState.mode !== 'words');
+    bookSelect.classList.toggle('hidden', !books);
+    bookSelect.value = gameState.bookId;
     ghostBadge.classList.toggle('hidden', !gameState.isGhostEnabled);
     codeLanguageSelect.classList.toggle('hidden', gameState.category !== 'code');
     lessonSelect.classList.toggle('hidden', gameState.category !== 'lessons');
@@ -1619,9 +1733,21 @@ function updateQuickBar() {
     const lessons = gameState.category === 'lessons';
     practiceNote.classList.toggle(
         'hidden',
-        gameState.category !== 'weak' && !noCustomText && !noOwnCode && !lessons
+        gameState.category !== 'weak' && !noCustomText && !noOwnCode && !lessons && !books
     );
-    if (lessons) {
+    if (books) {
+        const book = runtime.books[gameState.bookId];
+        if (runtime.bookError === gameState.bookId) {
+            practiceNote.textContent =
+                'Could not load this book. Check the connection and press Restart.';
+        } else if (!book) {
+            practiceNote.textContent = 'Loading the book.';
+        } else {
+            const { chapter, page } = bookPosition(book);
+            const pages = book.chapters[chapter].pages.length;
+            practiceNote.textContent = `${book.chapters[chapter].title}, page ${page + 1} of ${pages}`;
+        }
+    } else if (lessons) {
         practiceNote.textContent = `Pass: ${LESSON_PASS.accuracy}% accuracy, ${LESSON_PASS.wpm} WPM`;
     } else if (noOwnCode) {
         practiceNote.textContent =
@@ -1658,7 +1784,7 @@ function focusInDialog(element) {
     }
 }
 
-function showResultModal(wpm, accuracy, { isNewBest, previousBest, lesson = '' }) {
+function showResultModal(wpm, accuracy, { isNewBest, previousBest, progress = '' }) {
     const elapsed = elapsedMs();
     const raw = elapsed >= 1000 ? Math.round(runtime.typedChars / 5 / (elapsed / 60000)) : 0;
     const wrong = runtime.typedChars - runtime.correctChars;
@@ -1721,8 +1847,8 @@ function showResultModal(wpm, accuracy, { isNewBest, previousBest, lesson = '' }
             : verdict;
         modalChallengeElement.textContent = `Challenge: you ${wpm} WPM, them ${challenge.wpm} WPM. ${outcome}`;
     }
-    modalLessonElement.textContent = lesson;
-    modalLessonElement.classList.toggle('hidden', !lesson);
+    modalProgressElement.textContent = progress;
+    modalProgressElement.classList.toggle('hidden', !progress);
     modalSourceElement.textContent = runtime.quoteSource;
     modalSourceElement.classList.toggle('hidden', !runtime.quoteSource);
     resultModal.classList.add('show');
@@ -1838,6 +1964,9 @@ function handleReplaySpeedClick(e) {
 const SITE_URL = 'https://tmhsdigital.github.io/Typing-Game/';
 
 function settingsLabel(separator = ' ') {
+    if (gameState.category === 'books') {
+        return BOOKS.find((book) => book.id === gameState.bookId).title;
+    }
     const length =
         gameState.mode === 'time' ? `${gameState.duration}s` : `${gameState.wordCount} words`;
     let category = categorySelect.selectedOptions[0]?.textContent || gameState.category;
@@ -2132,7 +2261,8 @@ function parseChallenge(data) {
     }
 
     const sanitized = sanitizeSettings(data.s);
-    if (sanitized.category === 'custom' || sanitized.codeLanguage === OWN_CODE) return null;
+    if (['custom', 'books'].includes(sanitized.category)) return null;
+    if (sanitized.codeLanguage === OWN_CODE) return null;
     const settings = {};
     for (const name of CHALLENGE_SETTINGS) settings[name] = sanitized[name];
     const weakKeys = Array.isArray(data.k)
@@ -2511,6 +2641,8 @@ const KEY_EXTRA_LABELS = {
 function describeKey(key) {
     const [mode, length, category = ''] = String(key).split(':');
     const [base, ...extras] = category.split('+');
+    const book = base.startsWith('books-') && BOOKS.find((entry) => `books-${entry.id}` === base);
+    if (book) return `Books, ${book.title}`;
     const value = base.replace(/-.*$/, '');
     const option = categorySelect.querySelector(`option[value="${CSS.escape(value)}"]`);
     const lengthLabel = mode === 'words' ? `${parseInt(length, 10)} words` : length;
@@ -2706,6 +2838,7 @@ function exportData() {
         [STORAGE_KEYS.keyStats]: keyStats,
         [STORAGE_KEYS.daily]: dailyResults,
         [STORAGE_KEYS.lessons]: lessonProgress,
+        [STORAGE_KEYS.books]: bookProgress,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
@@ -2809,12 +2942,14 @@ async function importData(file) {
     keyStats = validKeyStats(data[STORAGE_KEYS.keyStats]);
     dailyResults = validDaily(data[STORAGE_KEYS.daily]);
     lessonProgress = validLessons(data[STORAGE_KEYS.lessons]);
+    bookProgress = validBooks(data[STORAGE_KEYS.books]);
     Object.assign(gameState, sanitizeSettings(data[STORAGE_KEYS.settings]));
     saveJSON(STORAGE_KEYS.history, runHistory);
     saveJSON(STORAGE_KEYS.bests, bests);
     saveJSON(STORAGE_KEYS.keyStats, keyStats);
     saveJSON(STORAGE_KEYS.daily, dailyResults);
     saveJSON(STORAGE_KEYS.lessons, lessonProgress);
+    saveJSON(STORAGE_KEYS.books, bookProgress);
     saveSettings();
     applySettingsToUI();
     updateHighScoreDisplay();
@@ -2827,7 +2962,7 @@ function clearData() {
     if (clearBtn.textContent !== 'Click again to clear') {
         clearBtn.textContent = 'Click again to clear';
         statsStatus.textContent =
-            'This removes run history, best scores, key stats, daily results, and lesson progress.';
+            'This removes run history, best scores, key stats, daily results, and lesson and book progress.';
         return;
     }
     runHistory = [];
@@ -2835,12 +2970,14 @@ function clearData() {
     keyStats = {};
     dailyResults = {};
     lessonProgress = validLessons(null);
+    bookProgress = {};
     for (const key of [
         STORAGE_KEYS.history,
         STORAGE_KEYS.bests,
         STORAGE_KEYS.keyStats,
         STORAGE_KEYS.daily,
         STORAGE_KEYS.lessons,
+        STORAGE_KEYS.books,
     ]) {
         try {
             localStorage.removeItem(key);
@@ -3117,6 +3254,17 @@ function init() {
         option.value = String(n + 1);
         option.textContent = `${n + 1}. ${stage.name}`;
         lessonSelect.appendChild(option);
+    });
+    for (const book of BOOKS) {
+        const option = document.createElement('option');
+        option.value = book.id;
+        option.textContent = book.title;
+        bookSelect.appendChild(option);
+    }
+    bookSelect.addEventListener('change', (e) => {
+        gameState.bookId = e.target.value;
+        saveSettings();
+        resetGame();
     });
     lessonSelect.addEventListener('change', (e) => {
         gameState.lessonStage = Number(e.target.value);
