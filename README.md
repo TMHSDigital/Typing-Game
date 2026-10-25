@@ -4,6 +4,12 @@ A typing trainer that runs in the browser. Plain HTML, CSS, and JavaScript, no f
 
 Live: https://tmhsdigital.github.io/Typing-Game/
 
+- No account. Results are stored in your browser only, and the page makes no requests to other sites (see Privacy).
+- Works offline after the first visit (see Offline and install).
+- Code snippets in six languages, with leading indentation filled in for you (see Code Snippets).
+- Ghost Mode replays your best run on the same passage while you type (see Ghost Mode).
+- Challenge links carry a run in the URL, so a friend can race it without a server (see Challenge links).
+
 ![A run in progress: stats bar, mode and length controls, and the passage with typed words in white](docs/screenshot-run.png)
 
 ![The result dialog: WPM, accuracy, raw WPM, characters, time, missed keys, and charts for this run and recent runs](docs/screenshot-result.png)

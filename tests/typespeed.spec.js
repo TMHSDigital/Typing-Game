@@ -30,7 +30,7 @@ test.describe('loading', () => {
         const errors = collectErrors(page);
         await page.goto('/');
 
-        await expect(page).toHaveTitle('TypeSpeed');
+        await expect(page).toHaveTitle('TypeSpeed: typing test and trainer with code snippets');
         await expect(input(page)).toBeFocused();
         await expect(page.locator('#timer')).toHaveText('60');
         await expect(page.locator('#quick-duration .pill.active')).toHaveText('60s');
@@ -2360,4 +2360,24 @@ test('link previews have a title, description, and an image that exists', async 
     expect(meta['og:image']).toBe('https://tmhsdigital.github.io/Typing-Game/preview.png');
     // The deployed URL maps to the file in the repo root.
     expect((await request.get('/preview.png')).ok()).toBe(true);
+
+    // Search engines get one URL, a description of the app, and permission
+    // to crawl.
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+        'href',
+        'https://tmhsdigital.github.io/Typing-Game/'
+    );
+    const app = JSON.parse(await page.locator('script[type="application/ld+json"]').textContent());
+    expect(app).toMatchObject({
+        '@type': 'WebApplication',
+        name: 'TypeSpeed',
+        url: 'https://tmhsdigital.github.io/Typing-Game/',
+        applicationCategory: 'EducationalApplication',
+        offers: { price: '0' },
+    });
+    const robots = await request.get('/robots.txt');
+    expect(robots.ok()).toBe(true);
+    expect(await robots.text()).toContain('Allow: /');
+    // The deploy step copies robots.txt with the rest of the site.
+    expect(fs.readFileSync('.github/workflows/ci.yml', 'utf8')).toMatch(/cp [^\n]*robots\.txt/);
 });
